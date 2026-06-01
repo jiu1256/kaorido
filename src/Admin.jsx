@@ -53,12 +53,19 @@ body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP','Helvetica Neue',san
 .img-preview-sm{width:80px;height:80px;object-fit:contain;border-radius:8px;margin-bottom:8px;display:block;margin-left:auto;margin-right:auto;background:#F0EAE3;}
 `;
 
-const ITEM_TYPES = [
+const DEFAULT_ITEM_TYPES = [
   "香水","ボディミスト","ディフューザー","お香","アロマオイル","ロールオン",
   "アロマキャンドル","ヘアオイル","ヘアミスト","ボディクリーム","柔軟剤",
   "ファブリックミスト","ルームフレグランス","サシェ","バスソルト",
   "ハンドクリーム","ボディウォッシュ","練り香水",
 ];
+// ローカルストレージに追加アイテムを保存
+const getCustomTypes = () => {
+  try { return JSON.parse(localStorage.getItem("kaorido_item_types")||"[]"); } catch { return []; }
+};
+const saveCustomTypes = (types) => {
+  localStorage.setItem("kaorido_item_types", JSON.stringify(types));
+};
 const SHOPS = ["Amazon","楽天市場","Yahoo! ショッピング","公式サイト","Qoo10","ZOZOTOWN","@cosme SHOPPING"];
 const COUNTRIES = [
   { code:"",      flag:"",   name:"未選択" },
@@ -363,13 +370,22 @@ function ProductForm({ onSave, editId }) {
   const [allEffects, setAllEffects] = useState([]);
   const [selTags, setSelTags]       = useState([]);
   const [selEffects, setSelEffects] = useState([]);
-  const [dynamicTags, setDynamicTags] = useState([]);
-  const [newTagInput, setNewTagInput] = useState("");
-  const [newEffectInput, setNewEffectInput] = useState("");
   const [notes, setNotes]           = useState({ top:[""], mid:[""], base:[""] });
   const [links, setLinks]           = useState([{ shop_name:"Amazon", url:"", affiliate_code:"", current_price:"" }]);
   const [saving, setSaving]         = useState(false);
   const [variants, setVariants]     = useState([{volume:"", price:"", currency:"JPY", jpy_price:null, weight:"", dimensions:"", images:[]}]);
+  const [itemTypes, setItemTypes]   = useState([...DEFAULT_ITEM_TYPES, ...getCustomTypes()]);
+  const [newTypeInput, setNewTypeInput] = useState("");
+
+  const addItemType = () => {
+    const name = newTypeInput.trim();
+    if (!name || itemTypes.includes(name)) { setNewTypeInput(""); return; }
+    const customs = [...getCustomTypes(), name];
+    saveCustomTypes(customs);
+    setItemTypes([...DEFAULT_ITEM_TYPES, ...customs]);
+    setF(p=>({...p, type:name}));
+    setNewTypeInput("");
+  };
   const [f, setF] = useState({
     brand_id:"", name:"", type:"香水",
     desc_ja:"", desc_en:"", desc_ko:"", desc_zh:"", desc_fr:"",
@@ -386,10 +402,7 @@ function ProductForm({ onSave, editId }) {
 
   useEffect(() => {
     supabase.from("brands").select("id,name").order("name").then(({data})=>setBrands(data||[]));
-    supabase.from("effects").select("*").order("name_ja").then(({data})=>setAllEffects(data||[]));
-    supabase.from("tags").select("*").order("name").then(({data})=>{
-      if (data?.length) setDynamicTags(data.map(t=>t.name));
-    });
+    supabase.from("effects").select("*").then(({data})=>setAllEffects(data||[]));
   }, []);
 
   // 編集モード: 既存データを読み込む
@@ -452,7 +465,16 @@ function ProductForm({ onSave, editId }) {
   const addNote    = type => setNotes(p=>({...p,[type]:[...p[type],""]}));
   const setNote    = (type,i,v) => setNotes(p=>({...p,[type]:p[type].map((x,j)=>j===i?v:x)}));
   const removeNote = (type,i) => setNotes(p=>({...p,[type]:p[type].filter((_,j)=>j!==i)}));
-  const addLink    = () => setLinks(p=>[...p,{shop_name:"Amazon",url:"",affiliate_code:"",current_price:""}]);
+
+  // 過去に入力したノートをlocalStorageに蓄積
+  const NOTE_KEY = "kaorido_notes_history";
+  const getNoteHistory = () => { try { return JSON.parse(localStorage.getItem(NOTE_KEY)||"[]"); } catch { return []; } };
+  const addNoteHistory = (name) => {
+    if (!name.trim()) return;
+    const h = getNoteHistory();
+    if (!h.includes(name)) { h.unshift(name); localStorage.setItem(NOTE_KEY, JSON.stringify(h.slice(0,200))); }
+  };
+  const addLink    = () => setLinks(p=>[...p,{shop_name:"",url:"",affiliate_code:"",current_price:""}]);
   const setLink    = (i,k,v) => setLinks(p=>p.map((x,j)=>j===i?{...x,[k]:v}:x));
   const removeLink = i => setLinks(p=>p.filter((_,j)=>j!==i));
   const toggleTag    = t  => setSelTags(p=>p.includes(t)?p.filter(x=>x!==t):[...p,t]);
@@ -565,8 +587,16 @@ function ProductForm({ onSave, editId }) {
         <div className="fld">
           <label>アイテム種別 *</label>
           <select value={f.type} onChange={e=>set("type",e.target.value)}>
-            {ITEM_TYPES.map(t=><option key={t}>{t}</option>)}
+            {itemTypes.map(t=><option key={t}>{t}</option>)}
           </select>
+          {/* 新しいアイテム種別を追加 */}
+          <div style={{display:"flex",gap:6,marginTop:6}}>
+            <input placeholder="新しい種別を追加（例: ネックレス香水）"
+              value={newTypeInput} onChange={e=>setNewTypeInput(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&addItemType()}
+              style={{flex:1,border:"1px solid #E5DDD5",borderRadius:6,padding:"5px 9px",fontSize:12,background:"#FAF7F3",outline:"none",fontFamily:"inherit"}}/>
+            <button className="btn secondary btn-sm" onClick={addItemType}>+ 追加</button>
+          </div>
         </div>
       </div>
       <div className="form-row cols2">
@@ -658,10 +688,39 @@ function ProductForm({ onSave, editId }) {
           <label style={{display:"block",fontSize:11,fontWeight:600,letterSpacing:".1em",color:"#8B7B72",marginBottom:6}}>
             {type==="top"?"TOP ノート":type==="mid"?"MIDDLE ノート":"BASE ノート"}
           </label>
+          {/* 過去ノート履歴から選択 */}
+          {getNoteHistory().length > 0 && (
+            <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8,padding:"8px 10px",background:"#FAF7F3",borderRadius:7,border:"1px solid #E5DDD5"}}>
+              <span style={{fontSize:10,fontWeight:600,color:"#B0A098",marginRight:2,display:"flex",alignItems:"center"}}>履歴：</span>
+              {getNoteHistory().slice(0,30).map(name=>(
+                <span key={name}
+                  onClick={()=>{
+                    if(!notes[type].includes(name)){
+                      setNotes(p=>({...p,[type]:p[type].filter(x=>x!=="")||[""]}));
+                      setNotes(p=>({...p,[type]:[...p[type].filter(x=>x!==""),name]}));
+                    }
+                  }}
+                  style={{fontSize:11,padding:"2px 9px",borderRadius:10,cursor:"pointer",background:"#F0EAE3",color:"#8B7B72",userSelect:"none",transition:"all .12s",border:"1px solid transparent"}}
+                  onMouseEnter={e=>{e.currentTarget.style.background="#C4885A";e.currentTarget.style.color="#fff";}}
+                  onMouseLeave={e=>{e.currentTarget.style.background="#F0EAE3";e.currentTarget.style.color="#8B7B72";}}>
+                  {name}
+                </span>
+              ))}
+            </div>
+          )}
           <div className="note-inputs">
             {notes[type].map((v,i)=>(
-              <div className="note-row" key={i}>
-                <input placeholder="例: ベルガモット" value={v} onChange={e=>setNote(type,i,e.target.value)}/>
+              <div className="note-row" key={i} style={{position:"relative"}}>
+                <input placeholder="例: ベルガモット" value={v}
+                  onChange={e=>setNote(type,i,e.target.value)}
+                  onBlur={e=>addNoteHistory(e.target.value)}
+                  list={`note-suggestions-${type}-${i}`}
+                />
+                <datalist id={`note-suggestions-${type}-${i}`}>
+                  {getNoteHistory().filter(h=>h.toLowerCase().includes(v.toLowerCase())&&h!==v).slice(0,8).map(h=>(
+                    <option key={h} value={h}/>
+                  ))}
+                </datalist>
                 {notes[type].length>1&&<button className="btn danger btn-sm" onClick={()=>removeNote(type,i)}>×</button>}
               </div>
             ))}
@@ -672,75 +731,21 @@ function ProductForm({ onSave, editId }) {
 
       <div className="sep"/>
       <p style={{fontSize:12,fontWeight:700,letterSpacing:".15em",color:"#B0A098",marginBottom:8}}>タグ（複数選択可）</p>
-      <div className="tag-grid" style={{marginBottom:8}}>
-        {(dynamicTags.length > 0 ? dynamicTags : ALL_TAGS).map(t=>(
+      <div className="tag-grid" style={{marginBottom:16}}>
+        {ALL_TAGS.map(t=>(
           <span key={t} className="tag-pill"
             style={{background:selTags.includes(t)?"#C4885A":"#F0EAE3",color:selTags.includes(t)?"#fff":"#8B7B72"}}
             onClick={()=>toggleTag(t)}>{t}</span>
         ))}
       </div>
-      {/* カスタムタグ追加 */}
-      <div style={{display:"flex",gap:6,marginBottom:16}}>
-        <input
-          placeholder="新しいタグを入力（例: #タバコ）"
-          value={newTagInput}
-          onChange={e=>setNewTagInput(e.target.value)}
-          onKeyDown={async e=>{
-            if (e.key!=="Enter") return;
-            e.preventDefault();
-            const raw = newTagInput.trim();
-            if (!raw) return;
-            const name = raw.startsWith("#") ? raw : "#"+raw;
-            if (dynamicTags.includes(name)||ALL_TAGS.includes(name)) { setSelTags(p=>p.includes(name)?p:[...p,name]); setNewTagInput(""); return; }
-            const { error } = await supabase.from("tags").insert([{ name, category:"scent" }]);
-            if (!error) { setDynamicTags(p=>[...p,name]); setSelTags(p=>[...p,name]); }
-            setNewTagInput("");
-          }}
-          style={{flex:1,border:"1px solid #E5DDD5",borderRadius:7,padding:"7px 11px",fontSize:13,background:"#FAF7F3",outline:"none",fontFamily:"inherit"}}
-        />
-        <button className="btn secondary btn-sm" onClick={async ()=>{
-          const raw = newTagInput.trim();
-          if (!raw) return;
-          const name = raw.startsWith("#") ? raw : "#"+raw;
-          if (dynamicTags.includes(name)||ALL_TAGS.includes(name)) { setSelTags(p=>p.includes(name)?p:[...p,name]); setNewTagInput(""); return; }
-          const { error } = await supabase.from("tags").insert([{ name, category:"scent" }]);
-          if (!error) { setDynamicTags(p=>[...p,name]); setSelTags(p=>[...p,name]); }
-          setNewTagInput("");
-        }}>+ 追加</button>
-      </div>
 
       <p style={{fontSize:12,fontWeight:700,letterSpacing:".15em",color:"#B0A098",marginBottom:8}}>効果・効能（複数選択可）</p>
-      <div className="tag-grid" style={{marginBottom:8}}>
+      <div className="tag-grid" style={{marginBottom:16}}>
         {allEffects.map(e=>(
           <span key={e.id} className="tag-pill"
             style={{background:selEffects.includes(e.id)?"#3D6B48":"#EAF0E8",color:selEffects.includes(e.id)?"#fff":"#3D6B48"}}
             onClick={()=>toggleEffect(e.id)}>{e.name_ja}</span>
         ))}
-      </div>
-      {/* カスタム効果追加 */}
-      <div style={{display:"flex",gap:6,marginBottom:16}}>
-        <input
-          placeholder="新しい効果を入力（例: 花粉症対策）"
-          value={newEffectInput}
-          onChange={e=>setNewEffectInput(e.target.value)}
-          onKeyDown={async e=>{
-            if (e.key!=="Enter") return;
-            e.preventDefault();
-            const name = newEffectInput.trim();
-            if (!name) return;
-            const { data, error } = await supabase.from("effects").insert([{ name_ja:name, name_en:name, name_ko:name, name_zh:name, name_fr:name }]).select().single();
-            if (!error && data) { setAllEffects(p=>[...p,data]); setSelEffects(p=>[...p,data.id]); }
-            setNewEffectInput("");
-          }}
-          style={{flex:1,border:"1px solid #E5DDD5",borderRadius:7,padding:"7px 11px",fontSize:13,background:"#FAF7F3",outline:"none",fontFamily:"inherit"}}
-        />
-        <button className="btn secondary btn-sm" onClick={async ()=>{
-          const name = newEffectInput.trim();
-          if (!name) return;
-          const { data, error } = await supabase.from("effects").insert([{ name_ja:name, name_en:name, name_ko:name, name_zh:name, name_fr:name }]).select().single();
-          if (!error && data) { setAllEffects(p=>[...p,data]); setSelEffects(p=>[...p,data.id]); }
-          setNewEffectInput("");
-        }}>+ 追加</button>
       </div>
 
       <div className="sep"/>

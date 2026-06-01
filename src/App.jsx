@@ -1,15 +1,6 @@
-// src/App.jsx
-// Supabase対応版 — リアルデータで動くアプリ本体
-// デモ版との変更点:
-//   ① PRODUCTS定数 → useProducts()フックに置き換え
-//   ② ブランドカードの色情報 → DBから取得（ローカル定数はフォールバック）
-//   ③ 購入リンク → DBのbuy_linksテーブルから取得・実URLを使用
-//   ④ ローディング・エラー状態を追加
-
 import { useState } from "react";
 import { useProducts, useBrands, trackView } from "./hooks/useProducts";
 
-// ── ローカル定数（DBに登録するまでのフォールバック用） ───────────────
 const CATS = [
   {id:"all",l:"すべて"},
   {id:"香水",l:"香水"},{id:"ボディミスト",l:"ボディミスト"},{id:"ディフューザー",l:"ディフューザー"},
@@ -25,63 +16,66 @@ const TAG_GROUPS = [
   { label:"印象・雰囲気", tags:["#フェミニン","#ユニセックス","#ラグジュアリー","#カジュアル","#清楚","#エレガント","#和","#明るい","#癒し","#アジアン","#甘い","#さわやか","#個性的","#大人っぽい","#可愛い","#ロマンティック","#華やか","#落ち着き","#初心者向け"] },
 ];
 const BRAND_FALLBACK = {
-  "Dior":            { g:"linear-gradient(145deg,#F8E6EC,#EDD0D8)", logo:"#8A2040", abbr:"Dior" },
-  "Acqua di Parma":  { g:"linear-gradient(145deg,#FDEEC0,#F5D878)", logo:"#7A5010", abbr:"AdP" },
-  "YSL":             { g:"linear-gradient(145deg,#1E1C1C,#2C2828)", logo:"#D4A820", abbr:"YSL" },
-  "CHANEL":          { g:"linear-gradient(145deg,#1A1818,#2A2828)", logo:"#E8E0D8", abbr:"CHANEL" },
-  "Jo Malone":       { g:"linear-gradient(145deg,#F5EDE0,#E8D8C4)", logo:"#4A3020", abbr:"JM" },
-  "KUUMBA":          { g:"linear-gradient(145deg,#C8E8D8,#90C8B0)", logo:"#1A4030", abbr:"K" },
-  "Elizabeth Arden": { g:"linear-gradient(145deg,#F0C8D8,#D898B8)", logo:"#681840", abbr:"EA" },
-  "SABON":           { g:"linear-gradient(145deg,#C8D0E8,#9098C8)", logo:"#202068", abbr:"SABON" },
-  "JURLIQUE":        { g:"linear-gradient(145deg,#D4E8C0,#A8D090)", logo:"#284820", abbr:"JUR" },
-  "L'OCCITANE":      { g:"linear-gradient(145deg,#DCD0E8,#B890C8)", logo:"#401860", abbr:"L'O" },
-  "MARKS & WEB":     { g:"linear-gradient(145deg,#EAE8E0,#D8D4C8)", logo:"#2A2A20", abbr:"M&W" },
+  "Dior":{"g":"linear-gradient(145deg,#F8E6EC,#EDD0D8)","logo":"#8A2040","abbr":"Dior"},
+  "Acqua di Parma":{"g":"linear-gradient(145deg,#FDEEC0,#F5D878)","logo":"#7A5010","abbr":"AdP"},
+  "YSL":{"g":"linear-gradient(145deg,#1E1C1C,#2C2828)","logo":"#D4A820","abbr":"YSL"},
+  "CHANEL":{"g":"linear-gradient(145deg,#1A1818,#2A2828)","logo":"#E8E0D8","abbr":"CHANEL"},
+  "Jo Malone":{"g":"linear-gradient(145deg,#F5EDE0,#E8D8C4)","logo":"#4A3020","abbr":"JM"},
+  "KUUMBA":{"g":"linear-gradient(145deg,#C8E8D8,#90C8B0)","logo":"#1A4030","abbr":"K"},
+  "Elizabeth Arden":{"g":"linear-gradient(145deg,#F0C8D8,#D898B8)","logo":"#681840","abbr":"EA"},
+  "SABON":{"g":"linear-gradient(145deg,#C8D0E8,#9098C8)","logo":"#202068","abbr":"SABON"},
+  "JURLIQUE":{"g":"linear-gradient(145deg,#D4E8C0,#A8D090)","logo":"#284820","abbr":"JUR"},
+  "L'OCCITANE":{"g":"linear-gradient(145deg,#DCD0E8,#B890C8)","logo":"#401860","abbr":"L'O"},
+  "MARKS & WEB":{"g":"linear-gradient(145deg,#EAE8E0,#D8D4C8)","logo":"#2A2A20","abbr":"M&W"},
 };
 const B_DEF = { g:"linear-gradient(145deg,#E8E4E0,#D4D0CC)", logo:"#3A3A3A", abbr:"◈" };
 const CUR_SYM = { JPY:"¥", USD:"$", EUR:"€", GBP:"£", KRW:"₩", CNY:"¥", CAD:"CA$", AUD:"A$", SEK:"kr", CHF:"CHF" };
 function formatPrice(price, currency) {
   if (!price) return "—";
   const sym = CUR_SYM[currency] || "";
-  const num = Number(price).toLocaleString();
-  return sym === "¥" || sym === "₩" ? sym + num : sym + num;
+  return sym + Number(price).toLocaleString();
 }
 const COUNTRY_LIST = [
-  { code:"JP", flag:"🇯🇵", name:"日本" },
-  { code:"KR", flag:"🇰🇷", name:"韓国" },
-  { code:"CN", flag:"🇨🇳", name:"中国" },
-  { code:"US", flag:"🇺🇸", name:"アメリカ" },
-  { code:"FR", flag:"🇫🇷", name:"フランス" },
-  { code:"GB", flag:"🇬🇧", name:"イギリス" },
-  { code:"IT", flag:"🇮🇹", name:"イタリア" },
-  { code:"DE", flag:"🇩🇪", name:"ドイツ" },
-  { code:"ES", flag:"🇪🇸", name:"スペイン" },
-  { code:"SE", flag:"🇸🇪", name:"スウェーデン" },
-  { code:"NL", flag:"🇳🇱", name:"オランダ" },
-  { code:"AU", flag:"🇦🇺", name:"オーストラリア" },
-  { code:"CA", flag:"🇨🇦", name:"カナダ" },
-  { code:"OTHER", flag:"🌍", name:"その他" },
+  {code:"JP",flag:"🇯🇵",name:"日本"},{code:"KR",flag:"🇰🇷",name:"韓国"},{code:"CN",flag:"🇨🇳",name:"中国"},
+  {code:"US",flag:"🇺🇸",name:"アメリカ"},{code:"FR",flag:"🇫🇷",name:"フランス"},{code:"GB",flag:"🇬🇧",name:"イギリス"},
+  {code:"IT",flag:"🇮🇹",name:"イタリア"},{code:"DE",flag:"🇩🇪",name:"ドイツ"},{code:"ES",flag:"🇪🇸",name:"スペイン"},
+  {code:"SE",flag:"🇸🇪",name:"スウェーデン"},{code:"NL",flag:"🇳🇱",name:"オランダ"},{code:"AU",flag:"🇦🇺",name:"オーストラリア"},
+  {code:"CA",flag:"🇨🇦",name:"カナダ"},{code:"OTHER",flag:"🌍",name:"その他"},
 ];
-const SORTS = [
-  {v:"views",l:"閲覧数順"},{v:"favs",l:"お気に入り順"},
-  {v:"price_asc",l:"安い順"},{v:"price_desc",l:"高い順"},{v:"rating",l:"評価順"},
-];
+const SORTS = [{v:"views",l:"閲覧数順"},{v:"favs",l:"お気に入り順"},{v:"price_asc",l:"安い順"},{v:"price_desc",l:"高い順"},{v:"rating",l:"評価順"}];
 const LANGS = ["日本語","English","한국어","中文","Français"];
 const T = {
-  "日本語": { about:"紹介", notes:"フレグランスノート", top:"トップ", mid:"ミドル", base:"ベース", effects:"効果・効能", ingr:"成分・詳細", ingrShow:"表示する（公式サイト記載）", ingrHide:"折りたたむ", buy:"購入先", buyPre:"", buySuf:" で見る", similar:"似ている香り", brandLink:"→ ブランドページ", home:"ホーム", ranking:"ランキング", favNav:"お気に入り", searchPh:"香水名・ブランド・#フローラルなどで検索...", tagBtn:"タグで探す", brandBtn:"ブランドから探す", brandPh:"ブランド名を入力...", back:"戻る", items:"件", noFav:"お気に入りはまだありません", noFavSub:"カードの ♡ ボタンで登録できます", noResult:"条件に合う商品が見つかりませんでした", selected:"件選択中", clearAll:"すべて解除", loading:"読み込み中...", error:"データの取得に失敗しました" },
-  "English": { about:"About", notes:"Fragrance Notes", top:"Top", mid:"Middle", base:"Base", effects:"Effects & Benefits", ingr:"Ingredients", ingrShow:"Show (from official site)", ingrHide:"Hide", buy:"Where to Buy", buyPre:"View on ", buySuf:"", similar:"Similar Fragrances", brandLink:"→ Brand Page", home:"Home", ranking:"Rankings", favNav:"Favorites", searchPh:"Search by name, brand, #floral...", tagBtn:"Filter by Tags", brandBtn:"Browse Brands", brandPh:"Search brand name...", back:"Back", items:" results", noFav:"No favorites yet", noFavSub:"Tap ♡ on any product card", noResult:"No products found", selected:" selected", clearAll:"Clear all", loading:"Loading...", error:"Failed to load data" },
-  "한국어": { about:"소개", notes:"프래그런스 노트", top:"탑 노트", mid:"미들 노트", base:"베이스 노트", effects:"효능", ingr:"성분 · 상세", ingrShow:"표시하기", ingrHide:"접기", buy:"구매처", buyPre:"", buySuf:"에서 보기", similar:"비슷한 향기", brandLink:"→ 브랜드 페이지", home:"홈", ranking:"랭킹", favNav:"즐겨찾기", searchPh:"향수명·브랜드·#플로럴로 검색...", tagBtn:"태그로 찾기", brandBtn:"브랜드로 찾기", brandPh:"브랜드 이름...", back:"돌아가기", items:"개", noFav:"즐겨찾기가 없습니다", noFavSub:"카드의 ♡ 버튼으로 등록", noResult:"검색 결과 없음", selected:"개 선택", clearAll:"모두 해제", loading:"로딩 중...", error:"데이터 로딩 실패" },
-  "中文": { about:"产品介绍", notes:"香调", top:"前调", mid:"中调", base:"后调", effects:"功效与益处", ingr:"成分 · 详情", ingrShow:"显示", ingrHide:"收起", buy:"购买途径", buyPre:"在", buySuf:"查看", similar:"相似香水", brandLink:"→ 品牌页面", home:"首页", ranking:"排行榜", favNav:"收藏", searchPh:"搜索香水名、品牌、#花香...", tagBtn:"按标签筛选", brandBtn:"按品牌浏览", brandPh:"输入品牌名称...", back:"返回", items:"件", noFav:"暂无收藏", noFavSub:"点击 ♡ 进行收藏", noResult:"未找到相关商品", selected:"项已选", clearAll:"清除全部", loading:"加载中...", error:"数据加载失败" },
-  "Français": { about:"Présentation", notes:"Notes de Parfum", top:"Note de tête", mid:"Note de cœur", base:"Note de fond", effects:"Bienfaits", ingr:"Ingrédients", ingrShow:"Afficher", ingrHide:"Réduire", buy:"Où Acheter", buyPre:"Voir sur ", buySuf:"", similar:"Parfums Similaires", brandLink:"→ Page Marque", home:"Accueil", ranking:"Classement", favNav:"Favoris", searchPh:"Rechercher nom, marque, #floral...", tagBtn:"Filtrer par tags", brandBtn:"Parcourir les marques", brandPh:"Rechercher une marque...", back:"Retour", items:" résultats", noFav:"Aucun favori", noFavSub:"Appuyez sur ♡ sur une carte", noResult:"Aucun produit trouvé", selected:" sélectionné(s)", clearAll:"Tout effacer", loading:"Chargement...", error:"Erreur de chargement" },
+  "日本語":{ about:"紹介", notes:"フレグランスノート", top:"トップ", mid:"ミドル", base:"ベース", effects:"効果・効能", ingr:"成分・詳細", ingrShow:"表示する（公式サイト記載）", ingrHide:"折りたたむ", buy:"購入先", buyPre:"", buySuf:" で見る", similar:"似ている香り", brandLink:"→ ブランドページ", home:"ホーム", ranking:"ランキング", favNav:"お気に入り", searchPh:"香水名・ブランド・#フローラルなどで検索...", tagBtn:"タグで探す", brandBtn:"ブランドから探す", brandPh:"ブランド名を入力...", back:"戻る", items:"件", noFav:"お気に入りはまだありません", noFavSub:"カードの ♡ ボタンで登録できます", noResult:"条件に合う商品が見つかりませんでした", selected:"件選択中", clearAll:"すべて解除", loading:"読み込み中...", error:"データの取得に失敗しました", simTitle:"類似検索", simPh:"商品名・ブランド・#タグで入力..." },
+  "English":{ about:"About", notes:"Fragrance Notes", top:"Top", mid:"Middle", base:"Base", effects:"Effects & Benefits", ingr:"Ingredients", ingrShow:"Show (from official site)", ingrHide:"Hide", buy:"Where to Buy", buyPre:"View on ", buySuf:"", similar:"Similar Fragrances", brandLink:"→ Brand Page", home:"Home", ranking:"Rankings", favNav:"Favorites", searchPh:"Search by name, brand, #floral...", tagBtn:"Filter by Tags", brandBtn:"Browse Brands", brandPh:"Search brand name...", back:"Back", items:" results", noFav:"No favorites yet", noFavSub:"Tap ♡ on any product card", noResult:"No products found", selected:" selected", clearAll:"Clear all", loading:"Loading...", error:"Failed to load data", simTitle:"Similar Search", simPh:"Product name, brand, or #tag..." },
+  "한국어":{ about:"소개", notes:"프래그런스 노트", top:"탑 노트", mid:"미들 노트", base:"베이스 노트", effects:"효능", ingr:"성분 · 상세", ingrShow:"표시하기", ingrHide:"접기", buy:"구매처", buyPre:"", buySuf:"에서 보기", similar:"비슷한 향기", brandLink:"→ 브랜드 페이지", home:"홈", ranking:"랭킹", favNav:"즐겨찾기", searchPh:"향수명·브랜드·#플로럴로 검색...", tagBtn:"태그로 찾기", brandBtn:"브랜드로 찾기", brandPh:"브랜드 이름...", back:"돌아가기", items:"개", noFav:"즐겨찾기가 없습니다", noFavSub:"카드의 ♡ 버튼으로 등록", noResult:"검색 결과 없음", selected:"개 선택", clearAll:"모두 해제", loading:"로딩 중...", error:"데이터 로딩 실패", simTitle:"유사 검색", simPh:"상품명·브랜드·#태그 입력..." },
+  "中文":{ about:"产品介绍", notes:"香调", top:"前调", mid:"中调", base:"后调", effects:"功效与益处", ingr:"成分 · 详情", ingrShow:"显示", ingrHide:"收起", buy:"购买途径", buyPre:"在", buySuf:"查看", similar:"相似香水", brandLink:"→ 品牌页面", home:"首页", ranking:"排行榜", favNav:"收藏", searchPh:"搜索香水名、品牌、#花香...", tagBtn:"按标签筛选", brandBtn:"按品牌浏览", brandPh:"输入品牌名称...", back:"返回", items:"件", noFav:"暂无收藏", noFavSub:"点击 ♡ 进行收藏", noResult:"未找到相关商品", selected:"项已选", clearAll:"清除全部", loading:"加载中...", error:"数据加载失败", simTitle:"相似搜索", simPh:"输入商品名·品牌·#标签..." },
+  "Français":{ about:"Présentation", notes:"Notes de Parfum", top:"Note de tête", mid:"Note de cœur", base:"Note de fond", effects:"Bienfaits", ingr:"Ingrédients", ingrShow:"Afficher", ingrHide:"Réduire", buy:"Où Acheter", buyPre:"Voir sur ", buySuf:"", similar:"Parfums Similaires", brandLink:"→ Page Marque", home:"Accueil", ranking:"Classement", favNav:"Favoris", searchPh:"Rechercher nom, marque, #floral...", tagBtn:"Filtrer par tags", brandBtn:"Parcourir les marques", brandPh:"Rechercher une marque...", back:"Retour", items:" résultats", noFav:"Aucun favori", noFavSub:"Appuyez sur ♡ sur une carte", noResult:"Aucun produit trouvé", selected:" sélectionné(s)", clearAll:"Tout effacer", loading:"Chargement...", error:"Erreur de chargement", simTitle:"Recherche Similaire", simPh:"Nom·marque·#tag..." },
 };
 
-// ── CSS ───────────────────────────────────────────────────────────────────
+// ── 類似度スコア計算 ────────────────────────────────────────
+function getSimilarProducts(target, allProducts, topN=8) {
+  return allProducts.filter(p=>p.id!==target.id).map(p=>{
+    let score=0;
+    if(p.type===target.type) score+=3;
+    if(p.brand===target.brand) score+=2;
+    score += p.tags.filter(t=>target.tags.includes(t)).length;
+    score += p.scenes.filter(s=>target.scenes.includes(s)).length;
+    score += p.top.filter(n=>target.top.includes(n)).length*2;
+    score += p.mid.filter(n=>target.mid.includes(n)).length;
+    score += p.base.filter(n=>target.base.includes(n)).length;
+    return {...p,_score:score};
+  }).filter(p=>p._score>0).sort((a,b)=>b._score-a._score).slice(0,topN);
+}
+
 const CSS = `
 *{box-sizing:border-box;margin:0;padding:0;}
 .lf{font-family:Georgia,'Times New Roman',serif;}
-.card{background:#fff;border-radius:12px;overflow:hidden;border:1px solid #E5DDD5;cursor:pointer;transition:transform .22s ease,box-shadow .22s ease;}
+.card{background:#fff;border-radius:12px;overflow:visible;border:1px solid #E5DDD5;cursor:pointer;transition:transform .22s ease,box-shadow .22s ease;position:relative;}
 .card:hover{transform:translateY(-5px);box-shadow:0 18px 44px rgba(50,25,8,.13);}
+.card-img{height:138px;position:relative;overflow:hidden;border-radius:12px 12px 0 0;flex-shrink:0;}
 .fav-btn{background:rgba(255,255,255,.88);border:none;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .15s;}
 .fav-btn:hover{transform:scale(1.2);}
+.card-fav{position:absolute;top:6px;right:6px;width:30px;height:30px;z-index:10;}
 .tpill{border-radius:12px;font-size:11px;padding:3px 9px;cursor:pointer;transition:all .15s;user-select:none;}
 .cbt{border-radius:20px;font-size:12px;padding:5px 14px;border:1px solid #E5DDD5;cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit;background:#FAF7F3;color:#6B5E55;}
 .cbt:hover{border-color:#C4885A;color:#C4885A;}.cbt.on{background:#C4885A!important;color:#fff!important;border-color:#C4885A!important;}
@@ -98,34 +92,30 @@ const CSS = `
 .mbox{background:#FAF7F3;border-radius:16px;max-width:560px;width:100%;max-height:88vh;overflow-y:auto;}
 .ldd{position:absolute;top:calc(100% + 4px);right:0;background:#fff;border:1px solid #E5DDD5;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.1);z-index:200;min-width:112px;overflow:hidden;}
 .ldi{padding:9px 16px;font-size:12px;cursor:pointer;color:#6B5E55;transition:background .1s;}.ldi:hover{background:#F0EAE3;}
-.rbdg{position:absolute;top:8px;left:8px;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;z-index:2;}
+.rbdg{position:absolute;top:8px;left:8px;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;z-index:10;}
 .tag-panel{background:#fff;border:1px solid #E5DDD5;border-radius:10px;padding:14px 16px;margin-top:8px;}
 .tog-btn{display:flex;align-items:center;gap:7px;background:none;border:1px solid #E5DDD5;border-radius:20px;padding:5px 14px;font-size:12px;color:#6B5E55;cursor:pointer;font-family:inherit;transition:all .15s;}
 .tog-btn:hover{border-color:#C4885A;color:#C4885A;}.tog-btn.active{background:#C4885A;color:#fff;border-color:#C4885A;}
 .ingr-toggle{display:flex;align-items:center;gap:6px;background:none;border:none;font-size:11px;color:#8B7B72;cursor:pointer;font-family:inherit;padding:0;}.ingr-toggle:hover{color:#C4885A;}
 .back-btn{display:flex;align-items:center;gap:6px;background:none;border:1px solid #E5DDD5;border-radius:20px;padding:5px 14px;font-size:12px;color:#6B5E55;cursor:pointer;font-family:inherit;transition:all .15s;}.back-btn:hover{border-color:#C4885A;color:#C4885A;}
-.brand-card{background:#fff;border-radius:10px;overflow:hidden;border:1px solid #E5DDD5;cursor:pointer;transition:all .18s;}
+.brand-card{background:#fff;border-radius:10px;overflow:hidden;border:1px solid #E5DDD5;cursor:pointer;transition:all .18s;position:relative;}
 .brand-card:hover{box-shadow:0 6px 18px rgba(50,25,8,.12);transform:translateY(-3px);}
 .brand-card.on{border-color:#C4885A;box-shadow:0 0 0 2px #C4885A40;}
 .spin{display:inline-block;width:28px;height:28px;border:3px solid #E5DDD5;border-top-color:#C4885A;border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
+.official-btn{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#C4885A;text-decoration:none;border:1px solid #C4885A;border-radius:20px;padding:5px 14px;transition:all .15s;cursor:pointer;}
+.official-btn:hover{background:#C4885A;color:#fff;}
 `;
 
-// ── HELPERS ────────────────────────────────────────────────────────────
-function Stars({ n }) {
+function Stars({n}) {
   return (
     <span style={{display:"flex",alignItems:"center",gap:2}}>
-      {[1,2,3,4,5].map(i=>(
-        <svg key={i} width="11" height="10" viewBox="0 0 11 10">
-          <polygon points="5.5,0.5 6.9,3.8 10.5,3.8 7.7,5.9 8.7,9.2 5.5,7.2 2.3,9.2 3.3,5.9 0.5,3.8 4.1,3.8"
-            fill={i<=Math.round(n)?"#C4885A":"#E5DDD5"}/>
-        </svg>
-      ))}
+      {[1,2,3,4,5].map(i=>(<svg key={i} width="11" height="10" viewBox="0 0 11 10"><polygon points="5.5,0.5 6.9,3.8 10.5,3.8 7.7,5.9 8.7,9.2 5.5,7.2 2.3,9.2 3.3,5.9 0.5,3.8 4.1,3.8" fill={i<=Math.round(n)?"#C4885A":"#E5DDD5"}/></svg>))}
       <span style={{fontSize:11,color:"#8B7B72",marginLeft:3}}>{n.toFixed(1)}</span>
     </span>
   );
 }
-function Bottle({ style: s }) {
+function Bottle({style:s}) {
   return (
     <svg style={s} viewBox="0 0 36 60" fill="none">
       <rect x="13" y="1" width="10" height="11" rx="3" fill="white" opacity=".45"/>
@@ -134,19 +124,14 @@ function Bottle({ style: s }) {
   );
 }
 
-// ── TAG PANEL ──────────────────────────────────────────────────────────
-function TagPanel({ groups, selected, onToggle }) {
+function TagPanel({groups,selected,onToggle}) {
   return (
     <div className="tag-panel">
-      {groups.map((g,gi) => (
+      {groups.map((g,gi)=>(
         <div key={g.label} style={{marginBottom:gi<groups.length-1?12:0}}>
           <p style={{fontSize:10,fontWeight:700,letterSpacing:".15em",color:"#B0A098",marginBottom:7}}>{g.label}</p>
           <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-            {g.tags.map(t=>(
-              <span key={t} className="tpill"
-                style={{background:selected.includes(t)?"#C4885A":"#F0EAE3",color:selected.includes(t)?"#fff":"#8B7B72"}}
-                onClick={()=>onToggle(t)}>{t}</span>
-            ))}
+            {g.tags.map(t=>(<span key={t} className="tpill" style={{background:selected.includes(t)?"#C4885A":"#F0EAE3",color:selected.includes(t)?"#fff":"#8B7B72"}} onClick={()=>onToggle(t)}>{t}</span>))}
           </div>
         </div>
       ))}
@@ -154,23 +139,24 @@ function TagPanel({ groups, selected, onToggle }) {
   );
 }
 
-// ── BRAND CARD ─────────────────────────────────────────────────────────
-function BrandCard({ brand, dbInfo, isOn, onClick }) {
-  const local = BRAND_FALLBACK[brand] || B_DEF;
-  const g    = dbInfo?.color_from && dbInfo?.color_to
-    ? `linear-gradient(145deg,${dbInfo.color_from},${dbInfo.color_to})` : local.g;
-  const logo = dbInfo?.logo_color || local.logo;
-  const abbr = dbInfo?.abbr || local.abbr || brand.slice(0,3).toUpperCase();
-  const fs   = abbr.length > 5 ? 11 : abbr.length > 3 ? 14 : 20;
-  const flag = COUNTRY_LIST.find(c=>c.code===dbInfo?.country)?.flag || "";
+function BrandCard({brand,dbInfo,isOn,onClick,favBrands,onFavBrand}) {
+  const local = BRAND_FALLBACK[brand]||B_DEF;
+  const g   = dbInfo?.color_from&&dbInfo?.color_to?`linear-gradient(145deg,${dbInfo.color_from},${dbInfo.color_to})`:local.g;
+  const logo = dbInfo?.logo_color||local.logo;
+  const abbr = dbInfo?.abbr||local.abbr||brand.slice(0,3).toUpperCase();
+  const fs   = abbr.length>5?11:abbr.length>3?14:20;
+  const flag = COUNTRY_LIST.find(c=>c.code===dbInfo?.country)?.flag||"";
+  const isFav = favBrands?.has(brand);
   return (
     <div className={`brand-card${isOn?" on":""}`} onClick={onClick}>
       <div style={{height:68,background:g,display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
-        {dbInfo?.logo_url
-          ? <img src={dbInfo.logo_url} style={{width:48,height:48,objectFit:"contain"}} alt={brand}/>
-          : <span style={{fontFamily:"Georgia,serif",fontSize:fs,fontWeight:400,color:logo,letterSpacing:".12em"}}>{abbr}</span>
-        }
+        {dbInfo?.logo_url?<img src={dbInfo.logo_url} style={{width:48,height:48,objectFit:"contain"}} alt={brand}/>
+          :<span style={{fontFamily:"Georgia,serif",fontSize:fs,fontWeight:400,color:logo,letterSpacing:".12em"}}>{abbr}</span>}
         {flag&&<span style={{position:"absolute",top:5,right:6,fontSize:15,lineHeight:1}}>{flag}</span>}
+        <button className="fav-btn" style={{position:"absolute",top:5,left:6,width:24,height:24,background:"rgba(255,255,255,.8)"}}
+          onClick={e=>{e.stopPropagation();onFavBrand&&onFavBrand(brand);}}>
+          <svg width="11" height="10" viewBox="0 0 14 12"><path d="M7 10.5S1 6.8 1 3.2A2.8 2.8 0 0 1 7 1.5 2.8 2.8 0 0 1 13 3.2C13 6.8 7 10.5 7 10.5z" fill={isFav?"#E05C70":"none"} stroke={isFav?"#E05C70":"#888"} strokeWidth="1.4"/></svg>
+        </button>
       </div>
       <div style={{padding:"6px 8px 8px",textAlign:"center",minHeight:34,display:"flex",alignItems:"center",justifyContent:"center"}}>
         <p style={{fontSize:10,fontWeight:500,color:isOn?"#C4885A":"#1C1815",lineHeight:1.3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{brand}</p>
@@ -179,25 +165,25 @@ function BrandCard({ brand, dbInfo, isOn, onClick }) {
   );
 }
 
-// ── PRODUCT CARD ───────────────────────────────────────────────────────
-function Card({ p, rank, fav, onFav, onClick }) {
+// ── PRODUCT CARD ── ハートをcardの外（z-index:10で最前面）に配置 ──
+function Card({p,rank,fav,onFav,onClick}) {
   return (
     <div className="card" onClick={onClick}>
-      {rank !== null && rank < 3 && (
+      {rank!==null&&rank<3&&(
         <div className="rbdg" style={{background:rank===0?"#C4885A":rank===1?"#9A9693":"#B8916A"}}>{rank+1}</div>
       )}
-      <div style={{height:138,background:p.g,position:"relative",flexShrink:0,overflow:"hidden"}}>
+      {/* ハートボタン：card直下に配置でoverflowに影響されない */}
+      <button className="fav-btn card-fav" onClick={e=>{e.stopPropagation();onFav(p.id);}}>
+        <svg width="14" height="12" viewBox="0 0 14 12">
+          <path d="M7 10.5S1 6.8 1 3.2A2.8 2.8 0 0 1 7 1.5 2.8 2.8 0 0 1 13 3.2C13 6.8 7 10.5 7 10.5z"
+            fill={fav?"#E05C70":"none"} stroke={fav?"#E05C70":"#777"} strokeWidth="1.4"/>
+        </svg>
+      </button>
+      <div className="card-img" style={{background:p.g}}>
         {p.image_url
-          ? <img src={p.image_url} alt={p.name} style={{width:"100%",height:"100%",objectFit:"contain",display:"block",background:"#fff",padding:"6px"}}/>
-          : <Bottle style={{position:"absolute",bottom:6,left:"50%",transform:"translateX(-50%)",width:36,height:58}}/>
+          ?<img src={p.image_url} alt={p.name} style={{width:"100%",height:"100%",objectFit:"contain",display:"block",background:"#fff",padding:"6px"}}/>
+          :<Bottle style={{position:"absolute",bottom:6,left:"50%",transform:"translateX(-50%)",width:36,height:58}}/>
         }
-        <button className="fav-btn" style={{position:"absolute",top:8,right:8,width:30,height:30}}
-          onClick={e=>{e.stopPropagation();onFav(p.id);}}>
-          <svg width="14" height="12" viewBox="0 0 14 12">
-            <path d="M7 10.5S1 6.8 1 3.2A2.8 2.8 0 0 1 7 1.5 2.8 2.8 0 0 1 13 3.2C13 6.8 7 10.5 7 10.5z"
-              fill={fav?"#E05C70":"none"} stroke={fav?"#E05C70":"#777"} strokeWidth="1.4"/>
-          </svg>
-        </button>
         <span style={{position:"absolute",bottom:7,right:9,background:"rgba(0,0,0,.22)",color:"#fff",fontSize:10,padding:"2px 7px",borderRadius:8}}>{p.type}</span>
       </div>
       <div style={{padding:"11px 13px"}}>
@@ -220,44 +206,30 @@ function Card({ p, rank, fav, onFav, onClick }) {
   );
 }
 
-// ── MODAL ──────────────────────────────────────────────────────────────
-function Modal({ p, fav, onFav, recs, onClose, onSelect, onBrand, lang }) {
-  const [showIngr,   setShowIngr]   = useState(false);
-  const [selVariant, setSelVariant] = useState(0);
-  const [selImage,   setSelImage]   = useState(0);
-  const t = T[lang] || T["日本語"];
-  const variants = Array.isArray(p.variants) && p.variants.length > 0 ? p.variants : null;
-  const selVar   = variants ? variants[selVariant] : null;
-  // 選択中バリアントの画像一覧（なければメイン画像）
-  const varImgs    = selVar?.images?.filter(Boolean) || [];
-  const allImgs    = varImgs.length > 0 ? varImgs : (p.image_url ? [p.image_url] : []);
-  const currentImg = allImgs[selImage] || null;
-  const changeVariant = (i) => { setSelVariant(i); setSelImage(0); };
-  const displayPrice = selVar?.price || p.price;
-  const displayCur   = selVar?.currency || p.variants?.[0]?.currency || "JPY";
-  const displayJpy   = selVar?.jpy_price;
-  const displayVol   = selVar?.volume || p.volume;
-  const shops = p.buyLinks?.length > 0
-    ? p.buyLinks
-    : [
-        {shop_name:"Amazon",           url:null},
-        {shop_name:"楽天市場",         url:null},
-        {shop_name:"Yahoo! ショッピング", url:null},
-        {shop_name:"公式サイト",       url:null},
-      ];
+function Modal({p,fav,onFav,recs,onClose,onSelect,onBrand,lang}) {
+  const [showIngr,setShowIngr]=useState(false);
+  const [selVariant,setSelVariant]=useState(0);
+  const [selImage,setSelImage]=useState(0);
+  const t=T[lang]||T["日本語"];
+  const variants=Array.isArray(p.variants)&&p.variants.length>0?p.variants:null;
+  const selVar=variants?variants[selVariant]:null;
+  const varImgs=selVar?.images?.filter(Boolean)||[];
+  const allImgs=varImgs.length>0?varImgs:(p.image_url?[p.image_url]:[]);
+  const currentImg=allImgs[selImage]||null;
+  const changeVariant=(i)=>{setSelVariant(i);setSelImage(0);};
+  const displayPrice=selVar?.price||p.price;
+  const displayCur=selVar?.currency||p.variants?.[0]?.currency||"JPY";
+  const displayJpy=selVar?.jpy_price;
+  const displayVol=selVar?.volume||p.volume;
+  const shops=p.buyLinks?.length>0?p.buyLinks:[{shop_name:"Amazon",url:null},{shop_name:"楽天市場",url:null},{shop_name:"Yahoo! ショッピング",url:null},{shop_name:"公式サイト",url:null}];
   return (
     <div className="ovl" onClick={onClose}>
       <div className="mbox" onClick={e=>e.stopPropagation()}>
         <div style={{height:200,background:currentImg?"#fff":p.g,position:"relative",borderRadius:"16px 16px 0 0",flexShrink:0,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
-          {currentImg
-            ? <img src={currentImg} alt={p.name} style={{width:"100%",height:"100%",objectFit:"contain",display:"block",padding:"10px"}}/>
-            : <Bottle style={{position:"absolute",bottom:10,left:"50%",transform:"translateX(-50%)",width:50,height:80}}/>
-          }
-          <button className="fav-btn" style={{position:"absolute",top:12,right:50,width:34,height:34,background:"rgba(255,255,255,.88)"}}
-            onClick={e=>{e.stopPropagation();onFav(p.id);}}>
-            <svg width="16" height="14" viewBox="0 0 16 14">
-              <path d="M8 12.5S1 8 1 4A3 3 0 0 1 8 2 3 3 0 0 1 15 4c0 4-7 8.5-7 8.5z" fill={fav?"#E05C70":"none"} stroke={fav?"#E05C70":"white"} strokeWidth="1.5"/>
-            </svg>
+          {currentImg?<img src={currentImg} alt={p.name} style={{width:"100%",height:"100%",objectFit:"contain",display:"block",padding:"10px"}}/>
+            :<Bottle style={{position:"absolute",bottom:10,left:"50%",transform:"translateX(-50%)",width:50,height:80}}/>}
+          <button className="fav-btn" style={{position:"absolute",top:12,right:50,width:34,height:34,background:"rgba(255,255,255,.88)"}} onClick={e=>{e.stopPropagation();onFav(p.id);}}>
+            <svg width="16" height="14" viewBox="0 0 16 14"><path d="M8 12.5S1 8 1 4A3 3 0 0 1 8 2 3 3 0 0 1 15 4c0 4-7 8.5-7 8.5z" fill={fav?"#E05C70":"none"} stroke={fav?"#E05C70":"white"} strokeWidth="1.5"/></svg>
           </button>
           <button style={{position:"absolute",top:12,right:12,background:"rgba(255,255,255,.88)",border:"none",borderRadius:"50%",width:34,height:34,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
             <svg width="13" height="13" viewBox="0 0 13 13"><path d="M2 2l9 9M11 2L2 11" stroke="#333" strokeWidth="1.8" strokeLinecap="round" fill="none"/></svg>
@@ -272,39 +244,22 @@ function Modal({ p, fav, onFav, recs, onClose, onSelect, onBrand, lang }) {
               <h2 style={{fontSize:18,fontWeight:500,color:"#1C1815",lineHeight:1.3}}>{p.name}</h2>
             </div>
             <div style={{textAlign:"right",flexShrink:0,marginLeft:12}}>
-              <p style={{fontSize:19,fontWeight:600,color:"#1C1815"}}>
-                {formatPrice(displayPrice, displayCur)}
-              </p>
-              {displayCur !== "JPY" && displayJpy && (
-                <p style={{fontSize:11,color:"#C4885A",marginTop:1}}>≈ ¥{Number(displayJpy).toLocaleString()}</p>
-              )}
+              <p style={{fontSize:19,fontWeight:600,color:"#1C1815"}}>{formatPrice(displayPrice,displayCur)}</p>
+              {displayCur!=="JPY"&&displayJpy&&<p style={{fontSize:11,color:"#C4885A",marginTop:1}}>≈ ¥{Number(displayJpy).toLocaleString()}</p>}
               <p style={{fontSize:11,color:"#8B7B72",marginTop:2}}>{displayVol}</p>
             </div>
           </div>
-
-          {/* 容量・サイズ選択 */}
-          {variants && variants.length > 1 && (
+          {variants&&variants.length>1&&(
             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
               {variants.map((v,i)=>(
-                <span key={i}
-                  onClick={()=>changeVariant(i)}
-                  style={{
-                    display:"inline-flex",flexDirection:"column",alignItems:"center",
-                    padding:"5px 12px",borderRadius:10,fontSize:11,cursor:"pointer",
-                    border:`1px solid ${selVariant===i?"#C4885A":"#E5DDD5"}`,
-                    background:selVariant===i?"#FDF5EF":"#FAF7F3",
-                    color:selVariant===i?"#C4885A":"#6B5E55",
-                    transition:"all .15s",userSelect:"none",
-                  }}>
+                <span key={i} onClick={()=>changeVariant(i)} style={{display:"inline-flex",flexDirection:"column",alignItems:"center",padding:"5px 12px",borderRadius:10,fontSize:11,cursor:"pointer",border:`1px solid ${selVariant===i?"#C4885A":"#E5DDD5"}`,background:selVariant===i?"#FDF5EF":"#FAF7F3",color:selVariant===i?"#C4885A":"#6B5E55",transition:"all .15s",userSelect:"none"}}>
                   <span style={{fontWeight:600}}>{v.volume}</span>
-                  {v.price && <span style={{fontSize:10,marginTop:1}}>{formatPrice(v.price, v.currency||"JPY")}</span>}
+                  {v.price&&<span style={{fontSize:10,marginTop:1}}>{formatPrice(v.price,v.currency||"JPY")}</span>}
                 </span>
               ))}
             </div>
           )}
-
-          {/* 画像サムネイル（複数ある場合） */}
-          {allImgs.length > 1 && (
+          {allImgs.length>1&&(
             <div style={{display:"flex",gap:6,overflowX:"auto",marginBottom:12,paddingBottom:2}}>
               {allImgs.map((url,i)=>(
                 <img key={i} src={url} alt="" onClick={()=>setSelImage(i)}
@@ -312,18 +267,17 @@ function Modal({ p, fav, onFav, recs, onClose, onSelect, onBrand, lang }) {
               ))}
             </div>
           )}
-
           <div style={{marginBottom:10}}><Stars n={p.rating}/></div>
           <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:14}}>
             {[...p.tags,...p.scenes].map(tag=>(<span key={tag} style={{background:"#F0EAE3",color:"#8B7B72",fontSize:11,padding:"3px 9px",borderRadius:12}}>{tag}</span>))}
           </div>
-          {p.desc && (
+          {p.desc&&(
             <div style={{background:"#F8F4F0",borderRadius:8,padding:"12px 14px",marginBottom:13}}>
               <p style={{fontSize:10,fontWeight:700,letterSpacing:".15em",color:"#C4885A",marginBottom:7}}>{t.about.toUpperCase()}</p>
-              <p style={{fontSize:13,color:"#3C2820",lineHeight:1.8,whiteSpace:"pre-wrap"}}>{p.desc}</p>
+              <p style={{fontSize:13,color:"#1C1815",lineHeight:1.9,whiteSpace:"pre-wrap",letterSpacing:".01em"}}>{p.desc}</p>
             </div>
           )}
-          {(p.top.length>0||p.mid.length>0||p.base.length>0) && (
+          {(p.top.length>0||p.mid.length>0||p.base.length>0)&&(
             <div style={{background:"#F4EFE9",borderRadius:10,padding:"13px 15px",marginBottom:12}}>
               <p style={{fontSize:10,fontWeight:700,letterSpacing:".18em",color:"#C4885A",marginBottom:9}}>{t.notes.toUpperCase()}</p>
               {[[t.top,p.top],[t.mid,p.mid],[t.base,p.base]].map(([lbl,notes])=>notes.length>0&&(
@@ -334,60 +288,45 @@ function Modal({ p, fav, onFav, recs, onClose, onSelect, onBrand, lang }) {
               ))}
             </div>
           )}
-          {p.effects.length>0 && (
+          {p.effects.length>0&&(
             <div style={{marginBottom:13}}>
               <p style={{fontSize:10,fontWeight:700,letterSpacing:".15em",color:"#8B7B72",marginBottom:7}}>{t.effects.toUpperCase()}</p>
-              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                {p.effects.map(e=>(<span key={e} style={{background:"#EAF0E8",color:"#3D6B48",fontSize:11,padding:"4px 11px",borderRadius:12}}>{e}</span>))}
-              </div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{p.effects.map(e=>(<span key={e} style={{background:"#EAF0E8",color:"#3D6B48",fontSize:11,padding:"4px 11px",borderRadius:12}}>{e}</span>))}</div>
             </div>
           )}
-          {(p.ingr||p.ingr_en||p.ingr_ko||p.ingr_zh) && (() => {
-            const ingrMap = { "日本語":p.ingr, "English":p.ingr_en, "한국어":p.ingr_ko, "中文":p.ingr_zh, "Français":p.ingr_en };
-            const ingrText = ingrMap[lang] || p.ingr || p.ingr_en || "";
+          {(p.ingr||p.ingr_en||p.ingr_ko||p.ingr_zh)&&(()=>{
+            const ingrMap={"日本語":p.ingr,"English":p.ingr_en,"한국어":p.ingr_ko,"中文":p.ingr_zh,"Français":p.ingr_en};
+            const ingrText=ingrMap[lang]||p.ingr||p.ingr_en||"";
             return (
               <div style={{background:"#F4EFE9",borderRadius:8,padding:"10px 14px",marginBottom:15}}>
                 <button className="ingr-toggle" onClick={()=>setShowIngr(!showIngr)}>
                   <span style={{fontSize:10,fontWeight:700,letterSpacing:".12em",color:"#8B7B72"}}>{t.ingr.toUpperCase()}</span>
-                  <svg width="9" height="5" viewBox="0 0 9 5" style={{transform:showIngr?"rotate(180deg)":"none",transition:"transform .2s"}}>
-                    <path d="M0.5 0.5L4.5 4.5L8.5 0.5" stroke="#8B7B72" strokeWidth="1.2" fill="none" strokeLinecap="round"/>
-                  </svg>
+                  <svg width="9" height="5" viewBox="0 0 9 5" style={{transform:showIngr?"rotate(180deg)":"none",transition:"transform .2s"}}><path d="M0.5 0.5L4.5 4.5L8.5 0.5" stroke="#8B7B72" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>
                   <span style={{fontSize:10,color:"#B0A098"}}>{showIngr?t.ingrHide:t.ingrShow}</span>
                 </button>
-                {showIngr && (
-                  <>
-                    <p style={{fontSize:11,color:"#6B5E55",lineHeight:1.7,marginTop:8}}>{ingrText||"（未登録）"}</p>
-                    {/* 他の言語の成分がある場合に切替ボタンを表示 */}
-                    {[["日本語",p.ingr],["English",p.ingr_en],["한국어",p.ingr_ko],["中文",p.ingr_zh]].filter(([l,v])=>v&&l!==lang).length>0 && (
-                      <p style={{fontSize:10,color:"#B0A098",marginTop:6}}>
-                        {[["日本語",p.ingr],["English",p.ingr_en],["한국어",p.ingr_ko],["中文",p.ingr_zh]].filter(([l,v])=>v&&l!==lang).map(([l])=>l).join(" / ")} の成分情報もあります
-                      </p>
-                    )}
-                  </>
-                )}
+                {showIngr&&<p style={{fontSize:11,color:"#6B5E55",lineHeight:1.7,marginTop:8}}>{ingrText||"（未登録）"}</p>}
               </div>
             );
           })()}
           <div style={{marginBottom:20}}>
             <p style={{fontSize:10,fontWeight:700,letterSpacing:".15em",color:"#8B7B72",marginBottom:9}}>{t.buy.toUpperCase()}</p>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              {shops.map(s=>(
+              {shops.map((s,i)=>(
                 s.url
-                  ? <a key={s.shop_name} href={s.url} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none"}}>
-                      <button className="bbt fill" style={{width:"100%"}}>{t.buyPre}{s.shop_name}{t.buySuf}</button>
-                    </a>
-                  : <button key={s.shop_name||i} className="bbt out disabled">{t.buyPre}{s.shop_name||"公式サイト"}{t.buySuf}</button>
+                  ?<a key={i} href={s.url} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none"}}><button className="bbt fill" style={{width:"100%"}}>{t.buyPre}{s.shop_name}{t.buySuf}</button></a>
+                  :<button key={i} className="bbt out disabled">{t.buyPre}{s.shop_name}{t.buySuf}</button>
               ))}
             </div>
           </div>
-          {recs.length>0 && (
+          {recs.length>0&&(
             <div>
               <p style={{fontSize:10,fontWeight:700,letterSpacing:".15em",color:"#8B7B72",marginBottom:9}}>{t.similar.toUpperCase()}</p>
               <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:4}}>
                 {recs.map(r=>(
                   <div key={r.id} style={{flex:"0 0 108px",background:"#fff",border:"1px solid #E5DDD5",borderRadius:10,overflow:"hidden",cursor:"pointer"}} onClick={()=>onSelect(r)}>
-                    <div style={{height:62,background:r.g,position:"relative"}}>
-                      <Bottle style={{position:"absolute",bottom:3,left:"50%",transform:"translateX(-50%)",width:22,height:36}}/>
+                    <div style={{height:62,background:r.image_url?"#fff":r.g,position:"relative",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      {r.image_url?<img src={r.image_url} style={{width:"100%",height:"100%",objectFit:"contain",padding:"4px"}} alt=""/>
+                        :<Bottle style={{position:"absolute",bottom:3,left:"50%",transform:"translateX(-50%)",width:22,height:36}}/>}
                     </div>
                     <div style={{padding:"6px 8px"}}>
                       <p style={{fontSize:9,color:"#C4885A",fontWeight:600,marginBottom:2}}>{r.brand}</p>
@@ -404,85 +343,98 @@ function Modal({ p, fav, onFav, recs, onClose, onSelect, onBrand, lang }) {
   );
 }
 
-// ── LOADING / ERROR SCREENS ────────────────────────────────────────────
-function Loading({ msg }) {
-  return (
-    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"80px 20px",gap:16}}>
-      <div className="spin"/>
-      <p style={{fontSize:13,color:"#8B7B72"}}>{msg}</p>
-    </div>
-  );
+// ── 広告バナー（Google AdSense対応） ────────────────────────
+// AdSenseのコードを取得したらslotに貼り替えるだけ
+function AdBanner({ slot = "XXXXXXXXXX", style: s = {} }) {
+  // AdSense審査が通ったら以下のコメントを外して使用
+  // useEffect(()=>{
+  //   try { (window.adsbygoogle=window.adsbygoogle||[]).push({}); } catch(e){}
+  // },[]);
+  // return (
+  //   <ins className="adsbygoogle" style={{display:"block",...s}}
+  //     data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
+  //     data-ad-slot={slot} data-ad-format="auto" data-full-width-responsive="true"/>
+  // );
+
+  // 審査前のプレースホルダー（本番では外すこと）
+  if (import.meta.env.DEV) return null; // 開発中は非表示
+  return null;
 }
-function ErrorScreen({ msg, onRetry }) {
+
+// 広告帯（ランキングページなどに挿入）
+function AdStrip() {
   return (
-    <div style={{textAlign:"center",padding:"80px 20px"}}>
-      <p style={{fontSize:14,color:"#B03040",marginBottom:12}}>⚠ {msg}</p>
-      <button className="cbt" onClick={onRetry}>再試行</button>
+    <div style={{background:"#F8F4F0",border:"1px solid #E5DDD5",borderRadius:8,padding:"8px 16px",marginBottom:14,textAlign:"center",fontSize:11,color:"#B0A098"}}>
+      <AdBanner slot="XXXXXXXXXX" style={{minHeight:90}}/>
     </div>
   );
 }
 
-// ── APP ────────────────────────────────────────────────────────────────
+function Loading({msg}) {
+  return <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"80px 20px",gap:16}}><div className="spin"/><p style={{fontSize:13,color:"#8B7B72"}}>{msg}</p></div>;
+}
+function ErrorScreen({msg,onRetry}) {
+  return <div style={{textAlign:"center",padding:"80px 20px"}}><p style={{fontSize:14,color:"#B03040",marginBottom:12}}>⚠ {msg}</p><button className="cbt" onClick={onRetry}>再試行</button></div>;
+}
+
 export default function App() {
-  const [langIdx,   setLangIdx]   = useState(0);
-  const lang = LANGS[langIdx];
-  const t    = T[lang] || T["日本語"];
+  const [langIdx,setLangIdx]=useState(0);
+  const lang=LANGS[langIdx];
+  const t=T[lang]||T["日本語"];
+  const {products,loading,error,refetch}=useProducts(lang);
+  const {brandMap}=useBrands();
+  const [query,setQuery]=useState("");
+  const [selTags,setSelTags]=useState([]);
+  const [selCat,setSelCat]=useState("all");
+  const [favs,setFavs]=useState(new Set());
+  const [favBrands,setFavBrands]=useState(new Set());
+  const [sort,setSort]=useState("views");
+  const [view,setView]=useState("home");
+  const [modal,setModal]=useState(null);
+  const [showLang,setShowLang]=useState(false);
+  const [tagOpen,setTagOpen]=useState(false);
+  const [brandOpen,setBrandOpen]=useState(false);
+  const [brandQ,setBrandQ]=useState("");
+  const [brandCountry,setBrandCountry]=useState("");
+  const [curBrand,setCurBrand]=useState(null);
+  const [brandCat,setBrandCat]=useState("all");
+  const [brandTags,setBrandTags]=useState([]);
+  const [simQuery,setSimQuery]=useState("");
 
-  // ① ← ここがポイント。PRODUCTS定数の代わりにフックを使う
-  const { products, loading, error, refetch } = useProducts(lang);
-  const { brandMap }                           = useBrands();
-
-  const [query,     setQuery]     = useState("");
-  const [selTags,   setSelTags]   = useState([]);
-  const [selCat,    setSelCat]    = useState("all");
-  const [favs,      setFavs]      = useState(new Set());
-  const [sort,      setSort]      = useState("views");
-  const [view,      setView]      = useState("home");
-  const [modal,     setModal]     = useState(null);
-  const [showLang,  setShowLang]  = useState(false);
-  const [tagOpen,   setTagOpen]   = useState(false);
-  const [brandOpen, setBrandOpen] = useState(false);
-  const [brandQ,    setBrandQ]    = useState("");
-  const [brandCountry, setBrandCountry] = useState("");
-  const [curBrand,  setCurBrand]  = useState(null);
-  const [brandCat,  setBrandCat]  = useState("all");
-  const [brandTags, setBrandTags] = useState([]);
-
-  const allBrands  = [...new Set(products.map(p=>p.brand))].sort();
-  const filtBrands = allBrands.filter(b=>{
-    if(brandQ && !b.toLowerCase().includes(brandQ.toLowerCase())) return false;
-    if(brandCountry && brandMap[b]?.country !== brandCountry) return false;
+  const allBrands=[...new Set(products.map(p=>p.brand))].sort();
+  const filtBrands=allBrands.filter(b=>{
+    if(brandQ&&!b.toLowerCase().includes(brandQ.toLowerCase())) return false;
+    if(brandCountry&&brandMap[b]?.country!==brandCountry) return false;
     return true;
   });
+  const openBrand=b=>{setCurBrand(b);setBrandCat("all");setBrandTags([]);setView("brand");setBrandOpen(false);};
+  const toggleFav=id=>setFavs(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
+  const toggleFavBrand=name=>setFavBrands(prev=>{const n=new Set(prev);n.has(name)?n.delete(name):n.add(name);return n;});
+  const toggleTag=tag=>{setSelTags(prev=>prev.includes(tag)?prev.filter(x=>x!==tag):[...prev,tag]);setView("search");};
+  const toggleBTag=tag=>setBrandTags(prev=>prev.includes(tag)?prev.filter(x=>x!==tag):[...prev,tag]);
+  const openModal=p=>{setModal(p);trackView(p.id);};
 
-  const openBrand  = b => { setCurBrand(b); setBrandCat("all"); setBrandTags([]); setView("brand"); setBrandOpen(false); };
-  const toggleFav  = id => setFavs(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
-  const toggleTag  = tag => { setSelTags(prev=>prev.includes(tag)?prev.filter(x=>x!==tag):[...prev,tag]); setView("search"); };
-  const toggleBTag = tag => setBrandTags(prev=>prev.includes(tag)?prev.filter(x=>x!==tag):[...prev,tag]);
-
-  const openModal  = p => { setModal(p); trackView(p.id); };
-
-  const sorted = [...products].sort((a,b)=>{
+  const sorted=[...products].sort((a,b)=>{
     if(sort==="views") return b.views-a.views; if(sort==="favs") return b.favs-a.favs;
     if(sort==="price_asc") return a.price-b.price; if(sort==="price_desc") return b.price-a.price;
     return b.rating-a.rating;
   });
-  const filtered = sorted.filter(p=>{
+  const filtered=sorted.filter(p=>{
     if(selCat!=="all"&&p.type!==selCat) return false;
     if(query){const q=query.toLowerCase();if(!p.name.includes(q)&&!p.brand.toLowerCase().includes(q)&&![...p.tags,...p.scenes].some(t2=>t2.includes(q)))return false;}
     if(selTags.length>0&&!selTags.some(t2=>p.tags.includes(t2)||p.scenes.includes(t2)))return false;
     return true;
   });
-  const display    = view==="favorites" ? sorted.filter(p=>favs.has(p.id)) : filtered;
-  const brandProds = curBrand ? sorted.filter(p=>{
+  const display=view==="favorites"?sorted.filter(p=>favs.has(p.id)):filtered;
+  const brandProds=curBrand?sorted.filter(p=>{
     if(p.brand!==curBrand) return false;
     if(brandCat!=="all"&&p.type!==brandCat) return false;
     if(brandTags.length>0&&!brandTags.some(t2=>p.tags.includes(t2)||p.scenes.includes(t2)))return false;
     return true;
-  }) : [];
-  const brandItems   = curBrand ? [...new Set(products.filter(p=>p.brand===curBrand).map(p=>p.type))] : [];
-  const brandTagList = curBrand ? [...new Set(products.filter(p=>p.brand===curBrand).flatMap(p=>[...p.tags,...p.scenes]))] : [];
-  const recs = modal ? products.filter(p=>p.id!==modal.id&&(p.tags.some(t2=>modal.tags.includes(t2))||p.type===modal.type)).slice(0,4) : [];
+  }):[];
+  const brandItems=curBrand?[...new Set(products.filter(p=>p.brand===curBrand).map(p=>p.type))]:[];
+  const brandTagList=curBrand?[...new Set(products.filter(p=>p.brand===curBrand).flatMap(p=>[...p.tags,...p.scenes]))]:[];
+  const recs=modal?getSimilarProducts(modal,products,4):[];
 
   return (
     <>
@@ -495,16 +447,15 @@ export default function App() {
               <span style={{display:"block",fontSize:9,letterSpacing:".32em",color:"#B0A098",marginTop:-3}}>FRAGRANCE GUIDE</span>
             </div>
             <nav style={{display:"flex",gap:18,alignItems:"center"}}>
-              {[["home",t.home],["ranking",t.ranking],["favorites",`${t.favNav}${favs.size>0?` (${favs.size})`:""}`]].map(([id,lbl])=>(
+              {[["home",t.home],["ranking",t.ranking],["similar",t.simTitle],["favorites",`${t.favNav}${(favs.size+favBrands.size)>0?` (${favs.size+favBrands.size})`:""}`]].map(([id,lbl])=>(
                 <span key={id} className={`nvb${view===id?" on":""}`} style={{color:view===id?"#C4885A":"#6B5E55"}} onClick={()=>setView(id)}>{lbl}</span>
               ))}
             </nav>
             <div style={{position:"relative"}}>
               <button style={{background:"none",border:"1px solid #E5DDD5",borderRadius:6,padding:"4px 11px",fontSize:12,color:"#6B5E55",cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}} onClick={()=>setShowLang(!showLang)}>
-                {lang}
-                <svg width="8" height="5" viewBox="0 0 8 5"><path d="M0.5 0.5L4 4L7.5 0.5" stroke="#8B7B72" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>
+                {lang}<svg width="8" height="5" viewBox="0 0 8 5"><path d="M0.5 0.5L4 4L7.5 0.5" stroke="#8B7B72" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>
               </button>
-              {showLang&&(<div className="ldd">{LANGS.map((l,i)=>(<div key={i} className="ldi" onClick={()=>{setLangIdx(i);setShowLang(false);}}>{l}</div>))}</div>)}
+              {showLang&&<div className="ldd">{LANGS.map((l,i)=>(<div key={i} className="ldi" onClick={()=>{setLangIdx(i);setShowLang(false);}}>{l}</div>))}</div>}
             </div>
           </div>
         </header>
@@ -543,21 +494,12 @@ export default function App() {
                     <svg style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)"}} width="13" height="13" viewBox="0 0 17 17" fill="none"><circle cx="7" cy="7" r="5.5" stroke="#9A8A82" strokeWidth="1.4"/><path d="M11 11l4 4" stroke="#9A8A82" strokeWidth="1.4" strokeLinecap="round"/></svg>
                     <input placeholder={t.brandPh} value={brandQ} onChange={e=>setBrandQ(e.target.value)}/>
                   </div>
-                  {/* 国フィルター */}
                   <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>
-                    <span
-                      style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",border:`1px solid ${!brandCountry?"#C4885A":"#E5DDD5"}`,background:!brandCountry?"#C4885A":"#FAF7F3",color:!brandCountry?"#fff":"#6B5E55",transition:"all .15s",userSelect:"none"}}
-                      onClick={()=>setBrandCountry("")}>すべて</span>
-                    {COUNTRY_LIST.map(c=>(
-                      <span key={c.code}
-                        style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",border:`1px solid ${brandCountry===c.code?"#C4885A":"#E5DDD5"}`,background:brandCountry===c.code?"#C4885A":"#FAF7F3",color:brandCountry===c.code?"#fff":"#6B5E55",transition:"all .15s",userSelect:"none"}}
-                        onClick={()=>setBrandCountry(brandCountry===c.code?"":c.code)}>
-                        <span style={{fontSize:14}}>{c.flag}</span>{c.name}
-                      </span>
-                    ))}
+                    <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",border:`1px solid ${!brandCountry?"#C4885A":"#E5DDD5"}`,background:!brandCountry?"#C4885A":"#FAF7F3",color:!brandCountry?"#fff":"#6B5E55",transition:"all .15s",userSelect:"none"}} onClick={()=>setBrandCountry("")}>すべて</span>
+                    {COUNTRY_LIST.map(c=>(<span key={c.code} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",border:`1px solid ${brandCountry===c.code?"#C4885A":"#E5DDD5"}`,background:brandCountry===c.code?"#C4885A":"#FAF7F3",color:brandCountry===c.code?"#fff":"#6B5E55",transition:"all .15s",userSelect:"none"}} onClick={()=>setBrandCountry(brandCountry===c.code?"":c.code)}><span style={{fontSize:14}}>{c.flag}</span>{c.name}</span>))}
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(118px,1fr))",gap:8}}>
-                    {filtBrands.map(b=>(<BrandCard key={b} brand={b} dbInfo={brandMap[b]} isOn={curBrand===b&&view==="brand"} onClick={()=>openBrand(b)}/>))}
+                    {filtBrands.map(b=>(<BrandCard key={b} brand={b} dbInfo={brandMap[b]} isOn={curBrand===b&&view==="brand"} onClick={()=>openBrand(b)} favBrands={favBrands} onFavBrand={toggleFavBrand}/>))}
                     {filtBrands.length===0&&<p style={{fontSize:12,color:"#B0A098",gridColumn:"1/-1"}}>該当なし</p>}
                   </div>
                 </div>
@@ -565,77 +507,170 @@ export default function App() {
             </div>
           </div>
 
-          {/* ローディング・エラー */}
-          {loading && <Loading msg={t.loading}/>}
-          {!loading && error && <ErrorScreen msg={t.error} onRetry={refetch}/>}
+          {loading&&<Loading msg={t.loading}/>}
+          {!loading&&error&&<ErrorScreen msg={t.error} onRetry={refetch}/>}
 
-          {/* ブランドページ */}
-          {!loading && !error && view==="brand" && curBrand && (
-            <>
-              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-                <button className="back-btn" onClick={()=>{setView("home");setCurBrand(null);}}>
-                  <svg width="12" height="10" viewBox="0 0 12 10"><path d="M5 1L1 5l4 4M1 5h10" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  {t.back}
-                </button>
-                <h2 className="lf" style={{fontSize:20,fontWeight:400,color:"#1C1815"}}>{curBrand}</h2>
-                <span style={{fontSize:12,color:"#B0A098"}}>({products.filter(p=>p.brand===curBrand).length}{t.items})</span>
-              </div>
-              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:9}}>
-                <button className={`cbt${brandCat==="all"?" on":""}`} onClick={()=>setBrandCat("all")}>すべて</button>
-                {brandItems.map(c=>(<button key={c} className={`cbt${brandCat===c?" on":""}`} onClick={()=>setBrandCat(c)}>{c}</button>))}
-              </div>
-              <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:16}}>
-                {brandTagList.map(tag=>(<span key={tag} className="tpill" style={{background:brandTags.includes(tag)?"#C4885A":"#F0EAE3",color:brandTags.includes(tag)?"#fff":"#8B7B72"}} onClick={()=>toggleBTag(tag)}>{tag}</span>))}
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:14}}>
-                {brandProds.map(p=>(<Card key={p.id} p={p} rank={null} fav={favs.has(p.id)} onFav={toggleFav} onClick={()=>openModal(p)}/>))}
-              </div>
-              {brandProds.length===0&&<div style={{textAlign:"center",padding:"48px 20px",color:"#B0A098"}}><p>{t.noResult}</p></div>}
-            </>
-          )}
-
-          {/* 通常ビュー */}
-          {!loading && !error && view!=="brand" && (
-            <>
-              {view==="home"&&!query&&selTags.length===0&&(
-                <div style={{background:"linear-gradient(135deg,#F5ECE0,#EDE0D4)",borderRadius:14,padding:"28px 32px",marginBottom:22,display:"flex",justifyContent:"space-between",alignItems:"center",overflow:"hidden"}}>
-                  <div>
-                    <p style={{fontSize:10,letterSpacing:".3em",color:"#C4885A",marginBottom:7}}>FIND YOUR SIGNATURE SCENT</p>
-                    <h1 className="lf" style={{fontSize:26,fontWeight:400,lineHeight:1.38,marginBottom:9,color:"#1C1815"}}>あなただけの香りを<br/>見つけましょう</h1>
-                    <p style={{fontSize:13,color:"#8B7B72",lineHeight:1.75}}>好みの香り・シーン・アイテムから<br/>最適なフレグランスを提案します</p>
+          {/* ── ブランドページ ── */}
+          {!loading&&!error&&view==="brand"&&curBrand&&(()=>{
+            const bInfo=brandMap[curBrand];
+            const g=bInfo?.color_from&&bInfo?.color_to?`linear-gradient(145deg,${bInfo.color_from},${bInfo.color_to})`:"linear-gradient(135deg,#F5ECE0,#EDE0D4)";
+            const flag=COUNTRY_LIST.find(c=>c.code===bInfo?.country)?.flag||"";
+            return (
+              <>
+                {/* ブランドヘッダー */}
+                <div style={{borderRadius:14,overflow:"hidden",marginBottom:20,background:"#fff",border:"1px solid #E5DDD5"}}>
+                  {/* ブランドカラーのアクセントバー */}
+                  <div style={{height:6,background:g}}/>
+                  <div style={{padding:"24px 28px",display:"flex",alignItems:"center",gap:20}}>
+                    <div style={{width:80,height:80,borderRadius:12,background:"rgba(255,255,255,.75)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,overflow:"hidden"}}>
+                      {bInfo?.logo_url
+                        ?<img src={bInfo.logo_url} style={{width:"100%",height:"100%",objectFit:"contain",padding:8}} alt={curBrand}/>
+                        :<span style={{fontFamily:"Georgia,serif",fontSize:bInfo?.abbr?.length>5?11:bInfo?.abbr?.length>3?14:20,color:bInfo?.logo_color||"#3A3A3A",letterSpacing:".1em"}}>{bInfo?.abbr||curBrand.slice(0,3)}</span>
+                      }
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+                        <h2 style={{fontSize:22,fontWeight:400,color:"#1C1815",fontFamily:"Georgia,serif"}}>{curBrand}</h2>
+                        {flag&&<span style={{fontSize:20}}>{flag}</span>}
+                        <button className="fav-btn" style={{width:32,height:32,background:"rgba(255,255,255,.8)",marginLeft:4}} onClick={()=>toggleFavBrand(curBrand)}>
+                          <svg width="14" height="13" viewBox="0 0 16 14"><path d="M8 12.5S1 8 1 4A3 3 0 0 1 8 2 3 3 0 0 1 15 4c0 4-7 8.5-7 8.5z" fill={favBrands.has(curBrand)?"#E05C70":"none"} stroke={favBrands.has(curBrand)?"#E05C70":"#888"} strokeWidth="1.5"/></svg>
+                        </button>
+                      </div>
+                      {bInfo?.description_ja&&<p style={{fontSize:13,color:"#3C2820",lineHeight:1.8,marginBottom:10}}>{bInfo.description_ja}</p>}
+                      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                        {bInfo?.official_url&&(
+                          <a href={bInfo.official_url} target="_blank" rel="noopener noreferrer" className="official-btn">
+                            <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="currentColor" strokeWidth="1.2"/><path d="M3.5 5.5h4M5.5 3.5v4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                            公式サイト
+                          </a>
+                        )}
+                        <span style={{fontSize:12,color:"#8B7B72"}}>{products.filter(p=>p.brand===curBrand).length}{t.items}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div style={{fontSize:90,color:"#C4885A",opacity:.08,fontFamily:"Georgia,serif",lineHeight:1,flexShrink:0}}>◈</div>
                 </div>
-              )}
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                <span style={{fontSize:13,color:"#8B7B72"}}>
-                  {view==="favorites"&&`${t.favNav}（${display.length}${t.items}）`}
-                  {view==="ranking"&&t.ranking}
-                  {(view==="home"||view==="search")&&`${display.length}${t.items}`}
-                </span>
-                <select className="ssel" value={sort} onChange={e=>setSort(e.target.value)}>
-                  {SORTS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
-                </select>
-              </div>
-              {view==="ranking"&&(<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>{SORTS.map(o=>(<button key={o.v} className={`cbt${sort===o.v?" on":""}`} onClick={()=>setSort(o.v)}>{o.l}</button>))}</div>)}
-              {view==="favorites"&&favs.size===0&&(
-                <div style={{textAlign:"center",padding:"60px 20px",color:"#8B7B72"}}>
-                  <svg width="44" height="40" viewBox="0 0 44 40" style={{marginBottom:14,opacity:.22}}><path d="M22 36S2 24 2 11A9 9 0 0 1 22 6 9 9 0 0 1 42 11C42 24 22 36 22 36z" stroke="#8B7B72" strokeWidth="2" fill="none"/></svg>
-                  <p style={{fontSize:14,marginBottom:6}}>{t.noFav}</p>
-                  <p style={{fontSize:12,color:"#B0A098"}}>{t.noFavSub}</p>
+                <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+                  <button className="back-btn" onClick={()=>{setView("home");setCurBrand(null);}}>
+                    <svg width="12" height="10" viewBox="0 0 12 10"><path d="M5 1L1 5l4 4M1 5h10" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    {t.back}
+                  </button>
                 </div>
-              )}
-              {!(view==="favorites"&&favs.size===0)&&(
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:9}}>
+                  <button className={`cbt${brandCat==="all"?" on":""}`} onClick={()=>setBrandCat("all")}>すべて</button>
+                  {brandItems.map(c=>(<button key={c} className={`cbt${brandCat===c?" on":""}`} onClick={()=>setBrandCat(c)}>{c}</button>))}
+                </div>
+                <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:16}}>
+                  {brandTagList.map(tag=>(<span key={tag} className="tpill" style={{background:brandTags.includes(tag)?"#C4885A":"#F0EAE3",color:brandTags.includes(tag)?"#fff":"#8B7B72"}} onClick={()=>toggleBTag(tag)}>{tag}</span>))}
+                </div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:14}}>
-                  {display.map((p,i)=>(<Card key={p.id} p={p} rank={view==="home"||view==="ranking"?i:null} fav={favs.has(p.id)} onFav={toggleFav} onClick={()=>openModal(p)}/>))}
+                  {brandProds.map(p=>(<Card key={p.id} p={p} rank={null} fav={favs.has(p.id)} onFav={toggleFav} onClick={()=>openModal(p)}/>))}
                 </div>
+                {brandProds.length===0&&<div style={{textAlign:"center",padding:"48px 20px",color:"#B0A098"}}><p>{t.noResult}</p></div>}
+              </>
+            );
+          })()}
+
+          {/* ── 通常ビュー ── */}
+          {!loading&&!error&&view!=="brand"&&(
+            <>
+              {/* ホームヒーロー */}
+              {view==="home"&&!query&&selTags.length===0&&(
+                <div style={{background:"linear-gradient(135deg,#F5ECE0,#EDE0D4)",borderRadius:14,padding:"22px 32px",marginBottom:22,display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,overflow:"hidden"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:24,flex:1,minWidth:0}}>
+                    <div style={{fontSize:44,opacity:.18,fontFamily:"Georgia,serif",lineHeight:1,color:"#C4885A",flexShrink:0}}>◈</div>
+                    <div>
+                      <p style={{fontSize:9,letterSpacing:".35em",color:"#C4885A",marginBottom:5}}>FIND YOUR SIGNATURE SCENT</p>
+                      <h1 className="lf" style={{fontSize:22,fontWeight:400,lineHeight:1.3,color:"#1C1815",whiteSpace:"nowrap"}}>あなただけの香りを見つけましょう</h1>
+                    </div>
+                  </div>
+                  <p style={{fontSize:12,color:"#8B7B72",lineHeight:1.7,flexShrink:0,textAlign:"right"}}>
+                    香り・シーン・アイテムから<br/>最適な一本を提案します
+                  </p>
+                </div>
+              )}
+
+              {/* 類似検索ページ */}
+              {view==="similar"&&(
+                <div style={{marginBottom:20}}>
+                  <p style={{fontSize:14,fontWeight:500,color:"#1C1815",marginBottom:6}}>{t.simTitle}</p>
+                  <p style={{fontSize:13,color:"#6B5E55",marginBottom:14,lineHeight:1.7}}>商品名・ブランド・タグを入力すると、似ている香りを自動で探します。</p>
+                  <div className="si" style={{position:"relative",marginBottom:16}}>
+                    <svg style={{position:"absolute",left:15,top:"50%",transform:"translateY(-50%)"}} width="16" height="16" viewBox="0 0 17 17" fill="none"><circle cx="7" cy="7" r="5.5" stroke="#9A8A82" strokeWidth="1.4"/><path d="M11 11l4 4" stroke="#9A8A82" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                    <input placeholder={t.simPh} value={simQuery} onChange={e=>setSimQuery(e.target.value)}/>
+                  </div>
+                  {simQuery&&(()=>{
+                    const q=simQuery.toLowerCase();
+                    const base=products.find(p=>p.name.toLowerCase().includes(q)||p.brand.toLowerCase().includes(q)||[...p.tags,...p.scenes].some(t2=>t2.includes(q)));
+                    if(!base) return <p style={{fontSize:13,color:"#B0A098",textAlign:"center",padding:"40px 0"}}>「{simQuery}」に一致する商品が見つかりません</p>;
+                    const simProds=getSimilarProducts(base,products);
+                    return (
+                      <>
+                        <div style={{background:"#F4EFE9",borderRadius:10,padding:"12px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12,cursor:"pointer"}} onClick={()=>openModal(base)}>
+                          <div style={{width:52,height:52,borderRadius:8,background:base.image_url?"#fff":base.g,flexShrink:0,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                            {base.image_url?<img src={base.image_url} style={{width:"100%",height:"100%",objectFit:"contain",padding:"4px"}} alt=""/>:<Bottle style={{width:24,height:38}}/>}
+                          </div>
+                          <div style={{flex:1}}>
+                            <p style={{fontSize:10,color:"#C4885A",fontWeight:600,marginBottom:2}}>{base.brand}</p>
+                            <p style={{fontSize:13,fontWeight:500,color:"#1C1815"}}>{base.name}</p>
+                            <p style={{fontSize:11,color:"#8B7B72",marginTop:3}}>この商品に似た {simProds.length} 件を表示中</p>
+                          </div>
+                        </div>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:14}}>
+                          {simProds.map(p=>(<Card key={p.id} p={p} rank={null} fav={favs.has(p.id)} onFav={toggleFav} onClick={()=>openModal(p)}/>))}
+                        </div>
+                        {simProds.length===0&&<p style={{fontSize:13,color:"#B0A098",textAlign:"center",padding:"40px 0"}}>類似商品が見つかりませんでした</p>}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {view!=="similar"&&(
+                <>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                    <span style={{fontSize:13,color:"#8B7B72"}}>
+                      {view==="favorites"&&`${t.favNav}（${display.length}${t.items}）`}
+                      {view==="ranking"&&t.ranking}
+                      {(view==="home"||view==="search")&&`${display.length}${t.items}`}
+                    </span>
+                    <select className="ssel" value={sort} onChange={e=>setSort(e.target.value)}>
+                      {SORTS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+                    </select>
+                  </div>
+                  {view==="ranking"&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>{SORTS.map(o=>(<button key={o.v} className={`cbt${sort===o.v?" on":""}`} onClick={()=>setSort(o.v)}>{o.l}</button>))}</div>}
+                  {view==="favorites"&&favs.size===0&&favBrands.size===0&&(
+                    <div style={{textAlign:"center",padding:"60px 20px",color:"#8B7B72"}}>
+                      <svg width="44" height="40" viewBox="0 0 44 40" style={{marginBottom:14,opacity:.22}}><path d="M22 36S2 24 2 11A9 9 0 0 1 22 6 9 9 0 0 1 42 11C42 24 22 36 22 36z" stroke="#8B7B72" strokeWidth="2" fill="none"/></svg>
+                      <p style={{fontSize:14,marginBottom:6}}>{t.noFav}</p>
+                      <p style={{fontSize:12,color:"#B0A098"}}>{t.noFavSub}</p>
+                    </div>
+                  )}
+                  {!(view==="favorites"&&favs.size===0&&favBrands.size===0)&&(
+                    <>
+                      {view==="favorites"&&favBrands.size>0&&(
+                        <div style={{marginBottom:24}}>
+                          <p style={{fontSize:11,fontWeight:700,letterSpacing:".15em",color:"#B0A098",marginBottom:10}}>お気に入りブランド</p>
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(118px,1fr))",gap:8}}>
+                            {[...favBrands].map(b=>(<BrandCard key={b} brand={b} dbInfo={brandMap[b]} isOn={curBrand===b&&view==="brand"} onClick={()=>openBrand(b)} favBrands={favBrands} onFavBrand={toggleFavBrand}/>))}
+                          </div>
+                        </div>
+                      )}
+                      {(view!=="favorites"||favs.size>0)&&(
+                        <>
+                          {view==="favorites"&&favBrands.size>0&&favs.size>0&&<p style={{fontSize:11,fontWeight:700,letterSpacing:".15em",color:"#B0A098",marginBottom:10}}>お気に入り商品</p>}
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:14}}>
+                            {display.map((p,i)=>(<Card key={p.id} p={p} rank={view==="home"||view==="ranking"?i:null} fav={favs.has(p.id)} onFav={toggleFav} onClick={()=>openModal(p)}/>))}
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+                </>
               )}
             </>
           )}
         </main>
-
-        {modal&&(<Modal p={modal} fav={favs.has(modal.id)} onFav={toggleFav} recs={recs} lang={lang}
-          onClose={()=>setModal(null)} onSelect={p=>setModal(p)} onBrand={openBrand}/>)}
+        {modal&&<Modal p={modal} fav={favs.has(modal.id)} onFav={toggleFav} recs={recs} lang={lang} onClose={()=>setModal(null)} onSelect={p=>setModal(p)} onBrand={openBrand}/>}
       </div>
     </>
   );
