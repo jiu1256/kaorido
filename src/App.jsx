@@ -210,6 +210,11 @@ const NOTE_INFO = {
   "アンバー":       {emoji:"🫙",en:"Amber",      desc:"温かくリッチで甘い樹脂系香料。深みと官能性を与える。"},
   "アンブレット":   {emoji:"🌸",en:"Ambrette",   desc:"植物性ムスク。柔らかくフルーティな動物的香り。"},
 };
+const NOTE_FAMILY_COLOR = {
+  "シトラス":"#F5A623","フローラル":"#E8739A","フルーティ":"#E8A0BF",
+  "ウッディ":"#8B6914","ムスク":"#9B8EA8","オリエンタル":"#C4885A",
+  "グルマン":"#C47A3A","スパイシー":"#D04040","ハーバル":"#4A8C5C","グリーン":"#4A7C59",
+};
 
 function Stars({n}) {
   return (
@@ -217,6 +222,67 @@ function Stars({n}) {
       {[1,2,3,4,5].map(i=>(<svg key={i} width="11" height="10" viewBox="0 0 11 10"><polygon points="5.5,0.5 6.9,3.8 10.5,3.8 7.7,5.9 8.7,9.2 5.5,7.2 2.3,9.2 3.3,5.9 0.5,3.8 4.1,3.8" fill={i<=Math.round(n)?"#C4885A":"#E5DDD5"}/></svg>))}
       <span style={{fontSize:11,color:"#8B7B72",marginLeft:3}}>{n.toFixed(1)}</span>
     </span>
+  );
+}
+
+// クリックで評価できる星コンポーネント
+function StarRating({ productId, currentRating }) {
+  const [hover,  setHover]  = useState(0);
+  const [myRate, setMyRate] = useState(()=>{
+    try { return parseInt(localStorage.getItem("rate_"+productId)||"0"); } catch { return 0; }
+  });
+  const [submitted, setSubmitted] = useState(!!myRate);
+  const [avg, setAvg] = useState(currentRating||0);
+  const [count, setCount] = useState(0);
+
+  useEffect(()=>{
+    // 平均評価を取得
+    import("./lib/supabase").then(({supabase})=>{
+      supabase.from("product_ratings").select("score").eq("product_id",productId).then(({data})=>{
+        if (data?.length) {
+          const scores = data.map(r=>r.score);
+          setAvg(scores.reduce((a,b)=>a+b,0)/scores.length);
+          setCount(scores.length);
+        }
+      });
+    });
+  },[productId]);
+
+  const submit = async (score) => {
+    if (submitted) return;
+    try {
+      const {supabase} = await import("./lib/supabase");
+      await supabase.from("product_ratings").insert([{product_id:productId, score}]);
+      localStorage.setItem("rate_"+productId, String(score));
+      setMyRate(score); setSubmitted(true);
+      setAvg(prev=>(prev*count+score)/(count+1)); setCount(c=>c+1);
+    } catch(e) { console.error(e); }
+  };
+
+  const display = hover || myRate || avg;
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:3}}>
+        {[1,2,3,4,5].map(i=>(
+          <svg key={i} width="20" height="18" viewBox="0 0 11 10"
+            style={{cursor:submitted?"default":"pointer",transition:"transform .1s",transform:hover>=i?"scale(1.2)":"scale(1)"}}
+            onMouseEnter={()=>!submitted&&setHover(i)}
+            onMouseLeave={()=>!submitted&&setHover(0)}
+            onClick={()=>!submitted&&submit(i)}>
+            <polygon points="5.5,0.5 6.9,3.8 10.5,3.8 7.7,5.9 8.7,9.2 5.5,7.2 2.3,9.2 3.3,5.9 0.5,3.8 4.1,3.8"
+              fill={i<=Math.round(display)?"#C4885A":"#E5DDD5"}/>
+          </svg>
+        ))}
+        <span style={{fontSize:12,color:"#8B7B72",marginLeft:4}}>
+          {avg>0?avg.toFixed(1):"—"}
+          {count>0&&<span style={{fontSize:10,color:"#B0A098"}}> ({count}件)</span>}
+        </span>
+      </div>
+      {submitted
+        ? <p style={{fontSize:10,color:"#C4885A",marginTop:3}}>★ あなたの評価: {myRate}点　ありがとうございます！</p>
+        : <p style={{fontSize:10,color:"#B0A098",marginTop:3}}>星をタップして評価できます</p>
+      }
+    </div>
   );
 }
 function Bottle({style:s}) {
@@ -376,7 +442,7 @@ function Modal({p,fav,onFav,recs,onClose,onSelect,onBrand,lang,onNoteClick}) {
               ))}
             </div>
           )}
-          <div style={{marginBottom:10}}><Stars n={p.rating}/></div>
+          <div style={{marginBottom:12}}><StarRating productId={p.id} currentRating={p.rating}/></div>
           <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:14}}>
             {[...p.tags,...p.scenes].map(tag=>(<span key={tag} style={{background:"#F0EAE3",color:"#8B7B72",fontSize:11,padding:"3px 9px",borderRadius:12}}>{tag}</span>))}
           </div>
