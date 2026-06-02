@@ -59,13 +59,19 @@ const DEFAULT_ITEM_TYPES = [
   "ファブリックミスト","ルームフレグランス","サシェ","バスソルト",
   "ハンドクリーム","ボディウォッシュ","練り香水",
 ];
-// ローカルストレージに追加アイテムを保存
-const getCustomTypes = () => {
-  try { return JSON.parse(localStorage.getItem("kaorido_item_types")||"[]"); } catch { return []; }
+const getCustomTypes = () => { try { return JSON.parse(localStorage.getItem("kaorido_item_types")||"[]"); } catch { return []; } };
+const saveCustomTypes = (t) => { localStorage.setItem("kaorido_item_types", JSON.stringify(t)); };
+
+// ── ノート履歴 ──────────────────────────────────────────────
+const NOTE_KEY = "kaorido_notes_history";
+const getNoteHistory = () => { try { return JSON.parse(localStorage.getItem(NOTE_KEY)||"[]"); } catch { return []; } };
+const saveNoteHistory = (name) => {
+  if (!name.trim()) return;
+  const h = getNoteHistory();
+  const idx = h.indexOf(name); if (idx>-1) h.splice(idx,1);
+  h.unshift(name); localStorage.setItem(NOTE_KEY, JSON.stringify(h.slice(0,200)));
 };
-const saveCustomTypes = (types) => {
-  localStorage.setItem("kaorido_item_types", JSON.stringify(types));
-};
+
 const SHOPS = ["Amazon","楽天市場","Yahoo! ショッピング","公式サイト","Qoo10","ZOZOTOWN","@cosme SHOPPING"];
 const COUNTRIES = [
   { code:"",      flag:"",   name:"未選択" },
@@ -85,89 +91,69 @@ const COUNTRIES = [
   { code:"OTHER", flag:"🌍",  name:"その他" },
 ];
 const ALL_TAGS = [
-  // 香りの系統
   "#フローラル","#シトラス","#ウッディ","#グルマン","#フルーティ","#クリーン",
   "#セクシー","#ナチュラル","#パウダリー","#スパイシー","#アクア","#オリエンタル",
   "#ハーバル","#ムスキー","#グリーン","#スモーキー","#レザー","#インセンス",
   "#ベリー","#ミント","#フローラルフルーティ","#シトラスフローラル",
-  // シーン・用途
   "#デート","#オフィス","#リラックス","#春夏","#秋冬","#特別な日",
   "#日常","#就寝前","#ヨガ","#読書","#夜","#リビング",
   "#朝","#通勤","#お出かけ","#屋外","#お風呂上がり","#休日",
-  // 印象・雰囲気
   "#フェミニン","#ユニセックス","#ラグジュアリー","#カジュアル","#清楚",
   "#エレガント","#和","#明るい","#癒し","#アジアン",
   "#甘い","#さわやか","#個性的","#大人っぽい","#可愛い",
   "#ロマンティック","#華やか","#落ち着き","#初心者向け",
 ];
-
 const CURRENCIES = [
-  { code:"JPY", symbol:"¥",   name:"日本円",              flag:"🇯🇵" },
-  { code:"USD", symbol:"$",   name:"米ドル",              flag:"🇺🇸" },
-  { code:"EUR", symbol:"€",   name:"ユーロ",              flag:"🇪🇺" },
-  { code:"GBP", symbol:"£",   name:"英ポンド",            flag:"🇬🇧" },
-  { code:"KRW", symbol:"₩",   name:"韓国ウォン",          flag:"🇰🇷" },
-  { code:"CNY", symbol:"¥",   name:"中国元",              flag:"🇨🇳" },
-  { code:"CAD", symbol:"CA$", name:"カナダドル",          flag:"🇨🇦" },
-  { code:"AUD", symbol:"A$",  name:"オーストラリアドル",  flag:"🇦🇺" },
-  { code:"SEK", symbol:"kr",  name:"スウェーデンクローナ",flag:"🇸🇪" },
-  { code:"CHF", symbol:"CHF", name:"スイスフラン",        flag:"🇨🇭" },
+  { code:"JPY", symbol:"¥",   flag:"🇯🇵" },
+  { code:"USD", symbol:"$",   flag:"🇺🇸" },
+  { code:"EUR", symbol:"€",   flag:"🇪🇺" },
+  { code:"GBP", symbol:"£",   flag:"🇬🇧" },
+  { code:"KRW", symbol:"₩",   flag:"🇰🇷" },
+  { code:"CNY", symbol:"¥",   flag:"🇨🇳" },
+  { code:"CAD", symbol:"CA$", flag:"🇨🇦" },
+  { code:"AUD", symbol:"A$",  flag:"🇦🇺" },
+  { code:"SEK", symbol:"kr",  flag:"🇸🇪" },
+  { code:"CHF", symbol:"CHF", flag:"🇨🇭" },
 ];
 
-// ── 通貨付き価格入力（リアルタイム円換算） ──────────────────
 function CurrencyPriceInput({ price, currency, onPriceChange, onCurrencyChange }) {
   const [jpyEquiv, setJpyEquiv] = useState(null);
   const [loading,  setLoading]  = useState(false);
   const iStyle = {border:"1px solid #E5DDD5",borderRadius:7,padding:"7px 10px",fontSize:13,background:"#fff",outline:"none",fontFamily:"inherit",width:"100%"};
-
   useEffect(() => {
     if (!price || currency === "JPY") { setJpyEquiv(null); return; }
-    const timer = setTimeout(async () => {
+    const t = setTimeout(async () => {
       setLoading(true);
       try {
-        const res  = await fetch("https://api.frankfurter.app/latest?from="+currency+"&to=JPY");
-        const data = await res.json();
-        const rate = data.rates?.JPY;
-        if (rate) setJpyEquiv(Math.round(parseFloat(price) * rate));
-      } catch(e) { console.error("為替取得失敗", e); }
+        const r = await fetch("https://api.frankfurter.app/latest?from="+currency+"&to=JPY");
+        const d = await r.json();
+        if (d.rates?.JPY) setJpyEquiv(Math.round(parseFloat(price)*d.rates.JPY));
+      } catch(e) {}
       setLoading(false);
     }, 600);
-    return () => clearTimeout(timer);
+    return () => clearTimeout(t);
   }, [price, currency]);
-
-  const cur = CURRENCIES.find(c=>c.code===currency) || CURRENCIES[0];
-
+  const cur = CURRENCIES.find(c=>c.code===currency)||CURRENCIES[0];
   return (
     <div>
       <div style={{display:"flex",gap:6}}>
-        <select value={currency} onChange={e=>onCurrencyChange(e.target.value)}
-          style={{...iStyle,width:110,flexShrink:0,padding:"7px 6px"}}>
-          {CURRENCIES.map(c=>(
-            <option key={c.code} value={c.code}>{c.flag} {c.code}</option>
-          ))}
+        <select value={currency} onChange={e=>onCurrencyChange(e.target.value)} style={{...iStyle,width:110,flexShrink:0,padding:"7px 6px"}}>
+          {CURRENCIES.map(c=><option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
         </select>
         <div style={{flex:1,position:"relative"}}>
           <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:12,color:"#8B7B72",pointerEvents:"none"}}>{cur.symbol}</span>
-          <input type="number" placeholder="例: 19800" value={price}
-            onChange={e=>onPriceChange(e.target.value)}
-            style={{...iStyle,paddingLeft:cur.symbol.length>1?36:24}}/>
+          <input type="number" placeholder="例: 19800" value={price} onChange={e=>onPriceChange(e.target.value)} style={{...iStyle,paddingLeft:cur.symbol.length>1?36:24}}/>
         </div>
       </div>
-      {currency !== "JPY" && (
-        <p style={{fontSize:11,marginTop:5,color:jpyEquiv?"#C4885A":"#B0A098"}}>
-          {loading?"換算中...": jpyEquiv?"≈ ¥"+jpyEquiv.toLocaleString()+" （参考・登録時レート）":price?"円換算を取得中..":"金額を入力すると円換算が表示されます"}
-        </p>
-      )}
+      {currency!=="JPY"&&<p style={{fontSize:11,marginTop:5,color:jpyEquiv?"#C4885A":"#B0A098"}}>{loading?"換算中...":jpyEquiv?"≈ ¥"+jpyEquiv.toLocaleString()+" （参考・登録時レート）":price?"円換算を取得中...":"金額を入力すると円換算が表示されます"}</p>}
     </div>
   );
 }
 
-// ── 画像アップロード ────────────────────────────────────────
 function ImageUpload({ value, onChange, folder="products", label="画像", preview="normal" }) {
   const [uploading, setUploading] = useState(false);
   const [localPreview, setLocalPreview] = useState(value||null);
   const inputRef = useRef();
-
   const handleFile = async (file) => {
     if (!file||!file.type.startsWith("image/")) { alert("画像ファイルを選択してください"); return; }
     const reader = new FileReader();
@@ -185,24 +171,16 @@ function ImageUpload({ value, onChange, folder="products", label="画像", previ
     } catch(e) { alert("アップロードエラー: "+e.message); setLocalPreview(null); }
     setUploading(false);
   };
-
   const displaySrc = localPreview||value;
   return (
     <div className="fld">
       <label>{label}</label>
       <div className="img-upload-area" onClick={()=>inputRef.current.click()}
         onDrop={e=>{e.preventDefault();handleFile(e.dataTransfer.files[0]);}} onDragOver={e=>e.preventDefault()}>
-        {displaySrc ? (
-          <>
-            <img src={displaySrc} className={preview==="sm"?"img-preview-sm":"img-preview"} alt="preview" style={{margin:"0 auto"}}/>
-            <p style={{fontSize:11,color:"#8B7B72"}}>{uploading?"アップロード中...":"クリックまたはドラッグで変更"}</p>
-          </>
-        ) : (
-          <>
-            <div style={{fontSize:28,marginBottom:6,color:"#C4885A",opacity:.6}}>📷</div>
-            <p style={{fontSize:13,color:"#8B7B72",marginBottom:3}}>{uploading?"アップロード中...":"クリックまたはドラッグ＆ドロップ"}</p>
-            <p style={{fontSize:11,color:"#B0A098"}}>JPG・PNG・WEBP対応</p>
-          </>
+        {displaySrc?(
+          <><img src={displaySrc} className={preview==="sm"?"img-preview-sm":"img-preview"} alt="preview" style={{margin:"0 auto"}}/><p style={{fontSize:11,color:"#8B7B72"}}>{uploading?"アップロード中...":"クリックまたはドラッグで変更"}</p></>
+        ):(
+          <><div style={{fontSize:28,marginBottom:6,color:"#C4885A",opacity:.6}}>📷</div><p style={{fontSize:13,color:"#8B7B72",marginBottom:3}}>{uploading?"アップロード中...":"クリックまたはドラッグ＆ドロップ"}</p><p style={{fontSize:11,color:"#B0A098"}}>JPG・PNG・WEBP対応</p></>
         )}
       </div>
       <input ref={inputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>handleFile(e.target.files[0])}/>
@@ -210,11 +188,9 @@ function ImageUpload({ value, onChange, folder="products", label="画像", previ
   );
 }
 
-// ── 複数画像アップロード ────────────────────────────────────
-function MultiImageUpload({ images=[], onChange, folder="products" }) {
+function MultiImageUpload({ images=[], onChange }) {
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef();
-
   const handleFiles = async (files) => {
     if (!files?.length) return;
     setUploading(true);
@@ -234,17 +210,14 @@ function MultiImageUpload({ images=[], onChange, folder="products" }) {
     onChange([...images, ...uploaded]);
     setUploading(false);
   };
-
   const remove = (i) => onChange(images.filter((_,j)=>j!==i));
-
   return (
     <div>
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:6}}>
         {images.map((url,i)=>(
           <div key={i} style={{position:"relative",width:60,height:60}}>
             <img src={url} style={{width:60,height:60,objectFit:"cover",borderRadius:6,border:"1px solid #E5DDD5"}} alt=""/>
-            <button onClick={()=>remove(i)}
-              style={{position:"absolute",top:-5,right:-5,width:18,height:18,borderRadius:"50%",background:"#E05C70",border:"none",color:"#fff",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>×</button>
+            <button onClick={()=>remove(i)} style={{position:"absolute",top:-5,right:-5,width:18,height:18,borderRadius:"50%",background:"#E05C70",border:"none",color:"#fff",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>×</button>
           </div>
         ))}
         <div onClick={()=>inputRef.current.click()}
@@ -279,22 +252,35 @@ function Dashboard({ counts }) {
   );
 }
 
-function BrandForm({ onSave }) {
-  const empty = { name:"", abbr:"", color_from:"#F8E6EC", color_to:"#EDD0D8", logo_color:"#8A2040", description_ja:"", official_url:"", logo_url:"", country:"" };
+function BrandForm({ onSave, editBrandId, onBack }) {
+  const empty = { name:"", abbr:"", color_from:"#F8E6EC", color_to:"#EDD0D8", logo_color:"#8A2040", description_ja:"", official_url:"", logo_url:"", country:"", scent_intro:"", scent_types:[] };
   const [f, setF] = useState(empty);
   const [saving, setSaving] = useState(false);
   const set = (k,v) => setF(p=>({...p,[k]:v}));
+  // 編集モード: 既存ブランドデータを読み込む
+  const editLoadedRef = useRef(null);
+  useEffect(()=>{
+    if(!editBrandId||editLoadedRef.current===editBrandId) return;
+    editLoadedRef.current=editBrandId;
+    supabase.from("brands").select("*").eq("id",editBrandId).single().then(({data})=>{
+      if(data) setF({...empty,...data,scent_types:data.scent_types||[],scent_intro:data.scent_intro||""});
+    });
+  },[editBrandId]);
 
   const save = async () => {
     if (!f.name.trim()) return alert("ブランド名は必須です");
     setSaving(true);
-    const { error } = await supabase.from("brands").upsert([f], { onConflict:"name" });
+    let error;
+    if (editBrandId) {
+      ({error} = await supabase.from("brands").update(f).eq("id",editBrandId));
+    } else {
+      ({error} = await supabase.from("brands").upsert([f], { onConflict:"name" }));
+    }
     setSaving(false);
     if (error) return alert("エラー: "+error.message);
-    onSave("ブランドを登録しました");
-    setF(empty);
+    onSave(editBrandId?"ブランドを更新しました":"ブランドを登録しました");
+    if (!editBrandId) setF(empty);
   };
-
   return (
     <div className="card">
       <div className="form-row cols2">
@@ -318,96 +304,89 @@ function BrandForm({ onSave }) {
         <ImageUpload value={f.logo_url} onChange={v=>set("logo_url",v)} folder="brands" label="ブランドロゴ画像（任意）" preview="sm"/>
       </div>
       <div className="form-row cols3">
-        <div className="fld">
-          <label>カード色①</label>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <input type="color" value={f.color_from} onChange={e=>set("color_from",e.target.value)} style={{width:44,height:36,padding:2,cursor:"pointer"}}/>
-            <input value={f.color_from} onChange={e=>set("color_from",e.target.value)}/>
-          </div>
-        </div>
-        <div className="fld">
-          <label>カード色②</label>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <input type="color" value={f.color_to} onChange={e=>set("color_to",e.target.value)} style={{width:44,height:36,padding:2,cursor:"pointer"}}/>
-            <input value={f.color_to} onChange={e=>set("color_to",e.target.value)}/>
-          </div>
-        </div>
-        <div className="fld">
-          <label>ロゴ文字色</label>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <input type="color" value={f.logo_color} onChange={e=>set("logo_color",e.target.value)} style={{width:44,height:36,padding:2,cursor:"pointer"}}/>
-            <input value={f.logo_color} onChange={e=>set("logo_color",e.target.value)}/>
-          </div>
-        </div>
+        <div className="fld"><label>カード色①</label><div style={{display:"flex",gap:8,alignItems:"center"}}><input type="color" value={f.color_from} onChange={e=>set("color_from",e.target.value)} style={{width:44,height:36,padding:2,cursor:"pointer"}}/><input value={f.color_from} onChange={e=>set("color_from",e.target.value)}/></div></div>
+        <div className="fld"><label>カード色②</label><div style={{display:"flex",gap:8,alignItems:"center"}}><input type="color" value={f.color_to} onChange={e=>set("color_to",e.target.value)} style={{width:44,height:36,padding:2,cursor:"pointer"}}/><input value={f.color_to} onChange={e=>set("color_to",e.target.value)}/></div></div>
+        <div className="fld"><label>ロゴ文字色</label><div style={{display:"flex",gap:8,alignItems:"center"}}><input type="color" value={f.logo_color} onChange={e=>set("logo_color",e.target.value)} style={{width:44,height:36,padding:2,cursor:"pointer"}}/><input value={f.logo_color} onChange={e=>set("logo_color",e.target.value)}/></div></div>
       </div>
       <div style={{marginBottom:14}}>
         <label style={{display:"block",fontSize:11,fontWeight:600,letterSpacing:".1em",color:"#8B7B72",marginBottom:6}}>カードプレビュー</label>
         <div style={{width:130,borderRadius:10,overflow:"hidden",border:"1px solid #E5DDD5",display:"inline-block"}}>
           <div style={{height:68,background:`linear-gradient(145deg,${f.color_from},${f.color_to})`,display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
-            {f.logo_url
-              ? <img src={f.logo_url} style={{width:48,height:48,objectFit:"contain"}} alt="logo"/>
-              : <span style={{fontFamily:"Georgia,serif",fontSize:f.abbr.length>5?11:f.abbr.length>3?14:20,color:f.logo_color,letterSpacing:".12em"}}>{f.abbr||f.name.slice(0,3)||"◈"}</span>
-            }
+            {f.logo_url?<img src={f.logo_url} style={{width:48,height:48,objectFit:"contain"}} alt="logo"/>:<span style={{fontFamily:"Georgia,serif",fontSize:f.abbr.length>5?11:f.abbr.length>3?14:20,color:f.logo_color,letterSpacing:".12em"}}>{f.abbr||f.name.slice(0,3)||"◈"}</span>}
           </div>
-          <div style={{padding:"6px 8px",background:"#fff",textAlign:"center"}}>
-            <p style={{fontSize:10,fontWeight:500,color:"#1C1815"}}>{f.name||"ブランド名"}</p>
-          </div>
+          <div style={{padding:"6px 8px",background:"#fff",textAlign:"center"}}><p style={{fontSize:10,fontWeight:500,color:"#1C1815"}}>{f.name||"ブランド名"}</p></div>
         </div>
       </div>
-      <div className="form-row">
-        <div className="fld"><label>ブランド説明（日本語）</label><textarea placeholder="ブランドの説明を入力..." value={f.description_ja} onChange={e=>set("description_ja",e.target.value)}/></div>
-      </div>
-      <div className="form-row">
-        <div className="fld"><label>公式サイトURL</label><input placeholder="https://www.dior.com" value={f.official_url} onChange={e=>set("official_url",e.target.value)}/></div>
-      </div>
-      <button className="btn primary" onClick={save} disabled={saving}>{saving?"登録中...":"ブランドを登録"}</button>
+      <div className="form-row"><div className="fld"><label>ブランド説明（日本語）</label><textarea placeholder="ブランドの説明を入力..." value={f.description_ja} onChange={e=>set("description_ja",e.target.value)}/></div></div>
+      <div className="form-row"><div className="fld"><label>公式サイトURL</label><input placeholder="https://www.dior.com" value={f.official_url} onChange={e=>set("official_url",e.target.value)}/></div></div>
+      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+      {editBrandId&&onBack&&<button className="btn secondary" onClick={onBack}>← 一覧に戻る</button>}
+      <button className="btn primary" onClick={save} disabled={saving}>{saving?(editBrandId?"更新中...":"登録中..."):(editBrandId?"ブランドを更新":"ブランドを登録")}</button>
+    </div>
     </div>
   );
 }
 
 function ProductForm({ onSave, editId }) {
-  const [brands, setBrands]         = useState([]);
-  const [allEffects, setAllEffects] = useState([]);
-  const [selTags, setSelTags]       = useState([]);
-  const [selEffects, setSelEffects] = useState([]);
-  const [notes, setNotes]           = useState({ top:[""], mid:[""], base:[""] });
-  const [links, setLinks]           = useState([{ shop_name:"Amazon", url:"", affiliate_code:"", current_price:"" }]);
-  const [saving, setSaving]         = useState(false);
-  const [variants, setVariants]     = useState([{volume:"", price:"", currency:"JPY", jpy_price:null, weight:"", dimensions:"", images:[]}]);
-  const [itemTypes, setItemTypes]   = useState([...DEFAULT_ITEM_TYPES, ...getCustomTypes()]);
+  const [brands, setBrands]             = useState([]);
+  const [allEffects, setAllEffects]     = useState([]);
+  const [dynamicTags, setDynamicTags]   = useState([...ALL_TAGS]);
+  const [selTags, setSelTags]           = useState([]);
+  const [selEffects, setSelEffects]     = useState([]);
+  const [newTagInput, setNewTagInput]   = useState("");
+  const [newEffectInput, setNewEffectInput] = useState("");
+  const [notes, setNotes]               = useState({ top:[""], mid:[""], base:[""] });
+  const [links, setLinks]               = useState([{ shop_name:"Amazon", url:"", affiliate_code:"", current_price:"" }]);
+  const [saving, setSaving]             = useState(false);
+  const [variants, setVariants]         = useState([{volume:"",price:"",currency:"JPY",jpy_price:null,weight:"",dimensions:"",images:[]}]);
+  const [itemTypes, setItemTypes]       = useState([...DEFAULT_ITEM_TYPES, ...getCustomTypes()]);
   const [newTypeInput, setNewTypeInput] = useState("");
-
-  const addItemType = () => {
-    const name = newTypeInput.trim();
-    if (!name || itemTypes.includes(name)) { setNewTypeInput(""); return; }
-    const customs = [...getCustomTypes(), name];
-    saveCustomTypes(customs);
-    setItemTypes([...DEFAULT_ITEM_TYPES, ...customs]);
-    setF(p=>({...p, type:name}));
-    setNewTypeInput("");
-  };
+  const [loadingEdit, setLoadingEdit]   = useState(false);
+  const editLoadedRef = useRef(null);
   const [f, setF] = useState({
     brand_id:"", name:"", type:"香水",
     desc_ja:"", desc_en:"", desc_ko:"", desc_zh:"", desc_fr:"",
-    ingredients:"", ingr_en:"", ingr_ko:"", ingr_zh:"", color_from:"#FFB3C1", color_to:"#FF8FAB",
+    ingredients:"", ingr_en:"", ingr_ko:"", ingr_zh:"",
+    color_from:"#FFB3C1", color_to:"#FF8FAB",
     image_url:"", is_published:true,
   });
   const set = (k,v) => setF(p=>({...p,[k]:v}));
-  const addVariant    = () => setVariants(p=>[...p, {volume:"",price:"",currency:"JPY",jpy_price:null,weight:"",dimensions:"",images:[]}]);
+  const addVariant    = () => setVariants(p=>[...p,{volume:"",price:"",currency:"JPY",jpy_price:null,weight:"",dimensions:"",images:[]}]);
   const setVariant    = (i,k,v) => setVariants(p=>p.map((x,j)=>j===i?{...x,[k]:v}:x));
   const removeVariant = i => setVariants(p=>p.filter((_,j)=>j!==i));
-
-  const [loadingEdit, setLoadingEdit] = useState(false);
-  const editLoadedRef = useRef(null); // StrictMode二重実行防止
+  const addNote       = type => setNotes(p=>({...p,[type]:[...p[type],""]}));
+  const setNote       = (type,i,v) => setNotes(p=>({...p,[type]:p[type].map((x,j)=>j===i?v:x)}));
+  const removeNote    = (type,i) => setNotes(p=>({...p,[type]:p[type].filter((_,j)=>j!==i)}));
+  const addLink       = () => setLinks(p=>[...p,{shop_name:"Amazon",url:"",affiliate_code:"",current_price:""}]);
+  const setLink       = (i,k,v) => setLinks(p=>p.map((x,j)=>j===i?{...x,[k]:v}:x));
+  const removeLink    = i => setLinks(p=>p.filter((_,j)=>j!==i));
+  const toggleTag     = t => setSelTags(p=>p.includes(t)?p.filter(x=>x!==t):[...p,t]);
+  const toggleEffect  = id => setSelEffects(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
+  const addItemType   = () => {
+    const name = newTypeInput.trim();
+    if (!name||itemTypes.includes(name)) { setNewTypeInput(""); return; }
+    const customs = [...getCustomTypes(), name];
+    saveCustomTypes(customs);
+    setItemTypes([...DEFAULT_ITEM_TYPES, ...customs]);
+    setF(p=>({...p,type:name}));
+    setNewTypeInput("");
+  };
 
   useEffect(() => {
     supabase.from("brands").select("id,name").order("name").then(({data})=>setBrands(data||[]));
-    supabase.from("effects").select("*").then(({data})=>setAllEffects(data||[]));
+    supabase.from("effects").select("*").order("name_ja").then(({data})=>{
+      if (!data) return;
+      const seen = new Set();
+      setAllEffects(data.filter(e=>{ if(seen.has(e.name_ja)) return false; seen.add(e.name_ja); return true; }));
+    });
+    supabase.from("tags").select("name").order("name").then(({data})=>{
+      if (!data) return;
+      setDynamicTags([...new Set([...ALL_TAGS, ...data.map(t=>t.name)])]);
+    });
   }, []);
 
-  // 編集モード: 既存データを読み込む
   useEffect(() => {
-    if (!editId || editLoadedRef.current === editId) return;
+    if (!editId||editLoadedRef.current===editId) return;
     editLoadedRef.current = editId;
     setLoadingEdit(true);
     (async () => {
@@ -415,146 +394,72 @@ function ProductForm({ onSave, editId }) {
         .select("*, fragrance_notes(*), product_tags(tags(name)), product_effects(effect_id), buy_links(*)")
         .eq("id", editId).single();
       if (!p) { setLoadingEdit(false); return; }
-
-      // グラデーションから色を抽出
       const colorMatch = (p.gradient||"").match(/#[0-9A-Fa-f]{6}/g);
-      setF({
-        brand_id: p.brand_id||"", name: p.name||"", type: p.type||"香水",
-        desc_ja: p.desc_ja||"", desc_en: p.desc_en||"", desc_ko: p.desc_ko||"",
-        desc_zh: p.desc_zh||"", desc_fr: p.desc_fr||"",
-        ingredients: p.ingredients||"", ingr_en: p.ingr_en||"",
-        ingr_ko: p.ingr_ko||"", ingr_zh: p.ingr_zh||"",
-        color_from: colorMatch?.[0]||"#FFB3C1", color_to: colorMatch?.[1]||"#FF8FAB",
-        image_url: p.image_url||"", is_published: p.is_published??true,
+      setF({ brand_id:p.brand_id||"", name:p.name||"", type:p.type||"香水", desc_ja:p.desc_ja||"", desc_en:p.desc_en||"", desc_ko:p.desc_ko||"", desc_zh:p.desc_zh||"", desc_fr:p.desc_fr||"", ingredients:p.ingredients||"", ingr_en:p.ingr_en||"", ingr_ko:p.ingr_ko||"", ingr_zh:p.ingr_zh||"", color_from:colorMatch?.[0]||"#FFB3C1", color_to:colorMatch?.[1]||"#FF8FAB", image_url:p.image_url||"", is_published:p.is_published??true });
+      if (Array.isArray(p.variants)&&p.variants.length>0) { setVariants(p.variants); }
+      else if (p.price||p.volume) { setVariants([{volume:p.volume||"",price:p.price||"",currency:"JPY",jpy_price:null,weight:"",dimensions:"",images:[]}]); }
+      const noteObj={top:[],mid:[],base:[]};
+      const seenNotes=new Set();
+      (p.fragrance_notes||[]).sort((a,b)=>a.display_order-b.display_order).forEach(n=>{
+        const key=n.note_type+":"+n.ingredient_name;
+        if(noteObj[n.note_type]&&!seenNotes.has(key)){seenNotes.add(key);noteObj[n.note_type].push(n.ingredient_name);}
       });
-      // バリアント
-      if (Array.isArray(p.variants) && p.variants.length > 0) {
-        setVariants(p.variants);
-      } else if (p.price || p.volume) {
-        setVariants([{volume:p.volume||"", price:p.price||"", currency:"JPY", jpy_price:null, weight:"", dimensions:"", images:[]}]);
-      }
-      // ノート（重複除去して読み込み）
-      const noteObj = { top:[], mid:[], base:[] };
-      const seenNotes = new Set();
-      (p.fragrance_notes||[]).sort((a,b)=>a.display_order-b.display_order).forEach(n => {
-        const key = n.note_type + ":" + n.ingredient_name;
-        if (noteObj[n.note_type] && !seenNotes.has(key)) {
-          seenNotes.add(key);
-          noteObj[n.note_type].push(n.ingredient_name);
-        }
-      });
-      setNotes({ top: noteObj.top.length?noteObj.top:[""], mid: noteObj.mid.length?noteObj.mid:[""], base: noteObj.base.length?noteObj.base:[""] });
-      // タグ（重複除去）
+      setNotes({top:noteObj.top.length?noteObj.top:[""],mid:noteObj.mid.length?noteObj.mid:[""],base:noteObj.base.length?noteObj.base:[""]});
       setSelTags([...new Set((p.product_tags||[]).map(pt=>pt.tags?.name).filter(Boolean))]);
-      // 効果（重複除去）
       setSelEffects([...new Set((p.product_effects||[]).map(pe=>pe.effect_id).filter(Boolean))]);
-      // 購入リンク（重複除去）
-      if ((p.buy_links||[]).length > 0) {
-        const seenShops = new Set();
-        const uniqueLinks = p.buy_links.filter(l=>{
-          const k = l.shop_name+l.url;
-          if (seenShops.has(k)) return false;
-          seenShops.add(k); return true;
-        });
-        setLinks(uniqueLinks.map(l=>({ shop_name:l.shop_name||"", url:l.url||"", affiliate_code:l.affiliate_code||"", current_price:l.current_price||"" })));
+      if ((p.buy_links||[]).length>0) {
+        const seen=new Set();
+        setLinks(p.buy_links.filter(l=>{const k=l.shop_name+l.url;if(seen.has(k))return false;seen.add(k);return true;}).map(l=>({shop_name:l.shop_name||"",url:l.url||"",affiliate_code:l.affiliate_code||"",current_price:l.current_price||""})));
       }
       setLoadingEdit(false);
     })();
   }, [editId]);
 
-  const addNote    = type => setNotes(p=>({...p,[type]:[...p[type],""]}));
-  const setNote    = (type,i,v) => setNotes(p=>({...p,[type]:p[type].map((x,j)=>j===i?v:x)}));
-  const removeNote = (type,i) => setNotes(p=>({...p,[type]:p[type].filter((_,j)=>j!==i)}));
-
-  // 過去に入力したノートをlocalStorageに蓄積
-  const NOTE_KEY = "kaorido_notes_history";
-  const getNoteHistory = () => { try { return JSON.parse(localStorage.getItem(NOTE_KEY)||"[]"); } catch { return []; } };
-  const addNoteHistory = (name) => {
-    if (!name.trim()) return;
-    const h = getNoteHistory();
-    if (!h.includes(name)) { h.unshift(name); localStorage.setItem(NOTE_KEY, JSON.stringify(h.slice(0,200))); }
-  };
-  const addLink    = () => setLinks(p=>[...p,{shop_name:"",url:"",affiliate_code:"",current_price:""}]);
-  const setLink    = (i,k,v) => setLinks(p=>p.map((x,j)=>j===i?{...x,[k]:v}:x));
-  const removeLink = i => setLinks(p=>p.filter((_,j)=>j!==i));
-  const toggleTag    = t  => setSelTags(p=>p.includes(t)?p.filter(x=>x!==t):[...p,t]);
-  const toggleEffect = id => setSelEffects(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
-
   const save = async () => {
     if (!f.brand_id) return alert("ブランドを選択してください");
     if (!f.name.trim()) return alert("商品名は必須です");
     const validVariants = variants.filter(v=>v.volume.trim()||v.price);
-    // 円換算価格を取得（非JPYは為替レートで変換）
     const toJpy = async (price, currency) => {
       if (!price) return null;
-      if (currency === "JPY" || !currency) return parseInt(price);
-      try {
-        const res  = await fetch("https://api.frankfurter.app/latest?from="+currency+"&to=JPY");
-        const data = await res.json();
-        return Math.round(parseFloat(price) * (data.rates?.JPY || 1));
-      } catch { return parseInt(price); }
+      if (currency==="JPY"||!currency) return parseInt(price);
+      try { const r=await fetch("https://api.frankfurter.app/latest?from="+currency+"&to=JPY"); const d=await r.json(); return Math.round(parseFloat(price)*(d.rates?.JPY||1)); } catch { return parseInt(price); }
     };
-    const jpyPrices = await Promise.all(validVariants.map(v=>toJpy(v.price, v.currency)));
-    const variantsWithJpy = validVariants.map((v,i)=>({...v, jpy_price: jpyPrices[i]}));
-    const minPrice = jpyPrices.filter(Boolean).length > 0
-      ? Math.min(...jpyPrices.filter(Boolean))
-      : null;
+    const jpyPrices = await Promise.all(validVariants.map(v=>toJpy(v.price,v.currency)));
+    const variantsWithJpy = validVariants.map((v,i)=>({...v,jpy_price:jpyPrices[i]}));
+    const minPrice = jpyPrices.filter(Boolean).length>0?Math.min(...jpyPrices.filter(Boolean)):null;
     const gradient = `linear-gradient(145deg,${f.color_from},${f.color_to})`;
     setSaving(true);
     try {
-      const productData = {
-        ...f,
-        price: minPrice,
-        volume: validVariants.map(v=>v.volume).filter(Boolean).join(" / "),
-        variants: variantsWithJpy,
-        gradient,
-      };
-
+      const productData = { ...f, price:minPrice, volume:validVariants.map(v=>v.volume).filter(Boolean).join(" / "), variants:variantsWithJpy, gradient };
       let pid;
       if (editId) {
-        // 更新モード
-        const { error: e1 } = await supabase.from("products").update(productData).eq("id", editId);
+        const { error:e1 } = await supabase.from("products").update(productData).eq("id",editId);
         if (e1) throw e1;
         pid = editId;
-        // 関連テーブルを一旦削除して再登録
-        // 既存の関連データを削除（RLS DELETE権限が必要）
         const delResults = await Promise.all([
-          supabase.from("fragrance_notes").delete().eq("product_id", pid),
-          supabase.from("product_tags").delete().eq("product_id", pid),
-          supabase.from("product_effects").delete().eq("product_id", pid),
-          supabase.from("buy_links").delete().eq("product_id", pid),
+          supabase.from("fragrance_notes").delete().eq("product_id",pid),
+          supabase.from("product_tags").delete().eq("product_id",pid),
+          supabase.from("product_effects").delete().eq("product_id",pid),
+          supabase.from("buy_links").delete().eq("product_id",pid),
         ]);
         const delErrors = delResults.filter(r=>r.error).map(r=>r.error.message);
-        if (delErrors.length > 0) {
-          console.error("削除エラー:", delErrors);
-          throw new Error("削除エラー: " + delErrors.join(", "));
-        }
+        if (delErrors.length>0) throw new Error("削除エラー: "+delErrors.join(", "));
       } else {
-        // 新規登録モード
-        const { data: prod, error: e1 } = await supabase.from("products").insert([productData]).select().single();
+        const { data:prod, error:e1 } = await supabase.from("products").insert([productData]).select().single();
         if (e1) throw e1;
         pid = prod.id;
       }
-
       const noteRows = [];
-      ["top","mid","base"].forEach(type => {
-        notes[type].forEach((name,i) => {
-          if (name.trim()) noteRows.push({ product_id:pid, note_type:type, ingredient_name:name.trim(), display_order:i });
-        });
-      });
+      ["top","mid","base"].forEach(type=>{notes[type].forEach((name,i)=>{if(name.trim()) noteRows.push({product_id:pid,note_type:type,ingredient_name:name.trim(),display_order:i});});});
       if (noteRows.length) await supabase.from("fragrance_notes").insert(noteRows);
       if (selTags.length) {
-        const { data: tagRows } = await supabase.from("tags").select("id,name").in("name", selTags);
-        if (tagRows?.length) await supabase.from("product_tags").insert(tagRows.map(t=>({ product_id:pid, tag_id:t.id })));
+        const { data:tagRows } = await supabase.from("tags").select("id,name").in("name",selTags);
+        if (tagRows?.length) await supabase.from("product_tags").insert(tagRows.map(t=>({product_id:pid,tag_id:t.id})));
       }
-      if (selEffects.length) await supabase.from("product_effects").insert(selEffects.map(id=>({ product_id:pid, effect_id:id })));
-      const linkRows = links.filter(l=>l.url.trim()||l.shop_name.trim()).map(l=>({
-        product_id:pid, shop_name:l.shop_name, url:l.url||null,
-        affiliate_code:l.affiliate_code||null, current_price:l.current_price?parseInt(l.current_price):null,
-      }));
+      if (selEffects.length) await supabase.from("product_effects").insert(selEffects.map(id=>({product_id:pid,effect_id:id})));
+      const linkRows = links.filter(l=>l.url.trim()||l.shop_name.trim()).map(l=>({product_id:pid,shop_name:l.shop_name,url:l.url||null,affiliate_code:l.affiliate_code||null,current_price:l.current_price?parseInt(l.current_price):null}));
       if (linkRows.length) await supabase.from("buy_links").insert(linkRows);
-
-      onSave(editId ? "商品を更新しました！" : "商品を登録しました！");
+      onSave(editId?"商品を更新しました！":"商品を登録しました！");
       if (!editId) {
         setF({brand_id:"",name:"",type:"香水",desc_ja:"",desc_en:"",desc_ko:"",desc_zh:"",desc_fr:"",ingredients:"",ingr_en:"",ingr_ko:"",ingr_zh:"",color_from:"#FFB3C1",color_to:"#FF8FAB",image_url:"",is_published:true});
         setVariants([{volume:"",price:"",currency:"JPY",jpy_price:null,weight:"",dimensions:"",images:[]}]);
@@ -564,14 +469,30 @@ function ProductForm({ onSave, editId }) {
     setSaving(false);
   };
 
-  if (loadingEdit) return (
-    <div className="card" style={{textAlign:"center",padding:"60px 20px",color:"#8B7B72"}}>
-      <div style={{fontSize:13}}>データを読み込み中...</div>
-    </div>
-  );
+  if (loadingEdit) return <div className="card" style={{textAlign:"center",padding:"60px 20px",color:"#8B7B72"}}><div style={{fontSize:13}}>データを読み込み中...</div></div>;
 
   const iStyle = {width:"100%",border:"1px solid #E5DDD5",borderRadius:7,padding:"7px 10px",fontSize:13,background:"#fff",outline:"none",fontFamily:"inherit"};
   const lStyle = {fontSize:10,fontWeight:600,letterSpacing:".1em",color:"#B0A098",display:"block",marginBottom:4};
+
+  // ── ノート履歴チップコンポーネント（1箇所のみ定義）
+  const NoteHistoryChips = ({ type }) => {
+    const history = getNoteHistory();
+    if (!history.length) return null;
+    return (
+      <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8,padding:"7px 10px",background:"#FAF7F3",borderRadius:7,border:"1px solid #E5DDD5"}}>
+        <span style={{fontSize:10,fontWeight:600,color:"#B0A098",marginRight:2,alignSelf:"center"}}>履歴：</span>
+        {history.slice(0,40).map(name=>(
+          <span key={name}
+            onClick={()=>{ if(!notes[type].includes(name)) setNotes(p=>({...p,[type]:[...p[type].filter(x=>x!==""),name]})); }}
+            style={{fontSize:11,padding:"2px 9px",borderRadius:10,cursor:"pointer",background:"#F0EAE3",color:"#8B7B72",userSelect:"none",transition:"all .12s"}}
+            onMouseEnter={e=>{e.currentTarget.style.background="#C4885A";e.currentTarget.style.color="#fff";}}
+            onMouseLeave={e=>{e.currentTarget.style.background="#F0EAE3";e.currentTarget.style.color="#8B7B72";}}>
+            {name}
+          </span>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="card">
@@ -589,12 +510,8 @@ function ProductForm({ onSave, editId }) {
           <select value={f.type} onChange={e=>set("type",e.target.value)}>
             {itemTypes.map(t=><option key={t}>{t}</option>)}
           </select>
-          {/* 新しいアイテム種別を追加 */}
           <div style={{display:"flex",gap:6,marginTop:6}}>
-            <input placeholder="新しい種別を追加（例: ネックレス香水）"
-              value={newTypeInput} onChange={e=>setNewTypeInput(e.target.value)}
-              onKeyDown={e=>e.key==="Enter"&&addItemType()}
-              style={{flex:1,border:"1px solid #E5DDD5",borderRadius:6,padding:"5px 9px",fontSize:12,background:"#FAF7F3",outline:"none",fontFamily:"inherit"}}/>
+            <input placeholder="新しい種別（例: ネックレス香水）" value={newTypeInput} onChange={e=>setNewTypeInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addItemType()} style={{flex:1,border:"1px solid #E5DDD5",borderRadius:6,padding:"5px 9px",fontSize:12,background:"#FAF7F3",outline:"none",fontFamily:"inherit"}}/>
             <button className="btn secondary btn-sm" onClick={addItemType}>+ 追加</button>
           </div>
         </div>
@@ -609,78 +526,36 @@ function ProductForm({ onSave, editId }) {
         </div>
       </div>
 
-      {/* ── 容量・価格（複数対応） ── */}
+      {/* 容量・価格 */}
       <div className="fld" style={{marginBottom:14}}>
         <label>容量・価格・サイズ（複数ある場合は追加）</label>
         <div style={{display:"flex",flexDirection:"column",gap:10,marginTop:6}}>
           {variants.map((v,i)=>(
             <div key={i} style={{background:"#FAF7F3",borderRadius:8,padding:"12px 14px",border:"1px solid #E5DDD5"}}>
-              {/* 1行目: 容量・価格・重さ・サイズ・削除ボタン */}
               <div style={{display:"flex",gap:8,alignItems:"flex-end",marginBottom:10}}>
-                <div style={{flex:1}}>
-                  <label style={lStyle}>容量</label>
-                  <input placeholder="例: 50ml" value={v.volume} onChange={e=>setVariant(i,"volume",e.target.value)} style={iStyle}/>
-                </div>
-                <div style={{flex:2,minWidth:0}}>
-                  <label style={lStyle}>価格・通貨</label>
-                  <CurrencyPriceInput
-                    price={v.price}
-                    currency={v.currency||"JPY"}
-                    onPriceChange={val=>setVariant(i,"price",val)}
-                    onCurrencyChange={val=>setVariant(i,"currency",val)}
-                  />
-                </div>
-                <div style={{flex:1}}>
-                  <label style={lStyle}>重さ（任意）</label>
-                  <input placeholder="例: 120g" value={v.weight||""} onChange={e=>setVariant(i,"weight",e.target.value)} style={iStyle}/>
-                </div>
-                <div style={{flex:1}}>
-                  <label style={lStyle}>サイズ（任意）</label>
-                  <input placeholder="例: W5×H12cm" value={v.dimensions||""} onChange={e=>setVariant(i,"dimensions",e.target.value)} style={iStyle}/>
-                </div>
-                {variants.length > 1 && (
-                  <button className="btn danger btn-sm" style={{flexShrink:0}} onClick={()=>removeVariant(i)}>×</button>
-                )}
+                <div style={{flex:1}}><label style={lStyle}>容量</label><input placeholder="例: 50ml" value={v.volume} onChange={e=>setVariant(i,"volume",e.target.value)} style={iStyle}/></div>
+                <div style={{flex:2,minWidth:0}}><label style={lStyle}>価格・通貨</label><CurrencyPriceInput price={v.price} currency={v.currency||"JPY"} onPriceChange={val=>setVariant(i,"price",val)} onCurrencyChange={val=>setVariant(i,"currency",val)}/></div>
+                <div style={{flex:1}}><label style={lStyle}>重さ（任意）</label><input placeholder="例: 120g" value={v.weight||""} onChange={e=>setVariant(i,"weight",e.target.value)} style={iStyle}/></div>
+                <div style={{flex:1}}><label style={lStyle}>サイズ（任意）</label><input placeholder="例: W5×H12cm" value={v.dimensions||""} onChange={e=>setVariant(i,"dimensions",e.target.value)} style={iStyle}/></div>
+                {variants.length>1&&<button className="btn danger btn-sm" style={{flexShrink:0}} onClick={()=>removeVariant(i)}>×</button>}
               </div>
-              {/* 2行目: このサイズの写真 */}
-              <div>
-                <label style={lStyle}>このサイズの写真（複数追加可）</label>
-                <MultiImageUpload
-                  images={v.images||[]}
-                  onChange={imgs=>setVariant(i,"images",imgs)}
-                  folder="products"
-                />
-              </div>
+              <div><label style={lStyle}>このサイズの写真（複数追加可）</label><MultiImageUpload images={v.images||[]} onChange={imgs=>setVariant(i,"images",imgs)}/></div>
             </div>
           ))}
         </div>
         <button className="btn secondary btn-sm" style={{marginTop:8}} onClick={addVariant}>+ サイズを追加</button>
       </div>
 
-      {/* 商品メイン画像 */}
       <div className="form-row">
-        <ImageUpload value={f.image_url} onChange={v=>set("image_url",v)} folder="products" label="商品メイン画像（サイズに関わらず共通で使う画像）" preview="normal"/>
+        <ImageUpload value={f.image_url} onChange={v=>set("image_url",v)} folder="products" label="商品メイン画像（サイズ共通）" preview="normal"/>
       </div>
-
-      {/* グラデーション */}
       <div className="form-row cols2">
-        <div className="fld">
-          <label>カード色①（画像なし時の背景・開始色）</label>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <input type="color" value={f.color_from} onChange={e=>set("color_from",e.target.value)} style={{width:44,height:36,padding:2,cursor:"pointer",border:"1px solid #E5DDD5",borderRadius:6}}/>
-            <input value={f.color_from} onChange={e=>set("color_from",e.target.value)} style={{flex:1}}/>
-          </div>
-        </div>
-        <div className="fld">
-          <label>カード色②（終了色）</label>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <input type="color" value={f.color_to} onChange={e=>set("color_to",e.target.value)} style={{width:44,height:36,padding:2,cursor:"pointer",border:"1px solid #E5DDD5",borderRadius:6}}/>
-            <input value={f.color_to} onChange={e=>set("color_to",e.target.value)} style={{flex:1}}/>
-          </div>
-        </div>
+        <div className="fld"><label>カード色①</label><div style={{display:"flex",gap:8,alignItems:"center"}}><input type="color" value={f.color_from} onChange={e=>set("color_from",e.target.value)} style={{width:44,height:36,padding:2,cursor:"pointer",border:"1px solid #E5DDD5",borderRadius:6}}/><input value={f.color_from} onChange={e=>set("color_from",e.target.value)} style={{flex:1}}/></div></div>
+        <div className="fld"><label>カード色②</label><div style={{display:"flex",gap:8,alignItems:"center"}}><input type="color" value={f.color_to} onChange={e=>set("color_to",e.target.value)} style={{width:44,height:36,padding:2,cursor:"pointer",border:"1px solid #E5DDD5",borderRadius:6}}/><input value={f.color_to} onChange={e=>set("color_to",e.target.value)} style={{flex:1}}/></div></div>
       </div>
       <div style={{height:32,borderRadius:8,background:`linear-gradient(145deg,${f.color_from},${f.color_to})`,marginBottom:14,border:"1px solid #E5DDD5"}}/>
 
+      {/* フレグランスノート */}
       <div className="sep"/>
       <p style={{fontSize:12,fontWeight:700,letterSpacing:".15em",color:"#B0A098",marginBottom:12}}>フレグランスノート</p>
       {["top","mid","base"].map(type=>(
@@ -688,71 +563,79 @@ function ProductForm({ onSave, editId }) {
           <label style={{display:"block",fontSize:11,fontWeight:600,letterSpacing:".1em",color:"#8B7B72",marginBottom:6}}>
             {type==="top"?"TOP ノート":type==="mid"?"MIDDLE ノート":"BASE ノート"}
           </label>
-          {/* 過去ノート履歴から選択 */}
-          {getNoteHistory().length > 0 && (
-            <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8,padding:"8px 10px",background:"#FAF7F3",borderRadius:7,border:"1px solid #E5DDD5"}}>
-              <span style={{fontSize:10,fontWeight:600,color:"#B0A098",marginRight:2,display:"flex",alignItems:"center"}}>履歴：</span>
-              {getNoteHistory().slice(0,30).map(name=>(
-                <span key={name}
-                  onClick={()=>{
-                    if(!notes[type].includes(name)){
-                      setNotes(p=>({...p,[type]:p[type].filter(x=>x!=="")||[""]}));
-                      setNotes(p=>({...p,[type]:[...p[type].filter(x=>x!==""),name]}));
-                    }
-                  }}
-                  style={{fontSize:11,padding:"2px 9px",borderRadius:10,cursor:"pointer",background:"#F0EAE3",color:"#8B7B72",userSelect:"none",transition:"all .12s",border:"1px solid transparent"}}
-                  onMouseEnter={e=>{e.currentTarget.style.background="#C4885A";e.currentTarget.style.color="#fff";}}
-                  onMouseLeave={e=>{e.currentTarget.style.background="#F0EAE3";e.currentTarget.style.color="#8B7B72";}}>
-                  {name}
-                </span>
-              ))}
-            </div>
-          )}
+          {/* 履歴チップ（1回のみ） */}
+          <NoteHistoryChips type={type}/>
           <div className="note-inputs">
             {notes[type].map((v,i)=>(
-              <div className="note-row" key={i} style={{position:"relative"}}>
+              <div className="note-row" key={i}>
                 <input placeholder="例: ベルガモット" value={v}
                   onChange={e=>setNote(type,i,e.target.value)}
-                  onBlur={e=>addNoteHistory(e.target.value)}
-                  list={`note-suggestions-${type}-${i}`}
-                />
-                <datalist id={`note-suggestions-${type}-${i}`}>
-                  {getNoteHistory().filter(h=>h.toLowerCase().includes(v.toLowerCase())&&h!==v).slice(0,8).map(h=>(
-                    <option key={h} value={h}/>
-                  ))}
-                </datalist>
+                  onBlur={e=>saveNoteHistory(e.target.value)}
+                  list={`note-hist-${type}`}/>
                 {notes[type].length>1&&<button className="btn danger btn-sm" onClick={()=>removeNote(type,i)}>×</button>}
               </div>
             ))}
           </div>
+          <datalist id={`note-hist-${type}`}>
+            {getNoteHistory().filter(h=>!notes[type].includes(h)).slice(0,20).map(h=><option key={h} value={h}/>)}
+          </datalist>
           <button className="btn secondary btn-sm" style={{marginTop:6}} onClick={()=>addNote(type)}>+ 追加</button>
         </div>
       ))}
 
+      {/* タグ */}
       <div className="sep"/>
       <p style={{fontSize:12,fontWeight:700,letterSpacing:".15em",color:"#B0A098",marginBottom:8}}>タグ（複数選択可）</p>
-      <div className="tag-grid" style={{marginBottom:16}}>
-        {ALL_TAGS.map(t=>(
-          <span key={t} className="tag-pill"
-            style={{background:selTags.includes(t)?"#C4885A":"#F0EAE3",color:selTags.includes(t)?"#fff":"#8B7B72"}}
-            onClick={()=>toggleTag(t)}>{t}</span>
-        ))}
+      <div className="tag-grid" style={{marginBottom:8}}>
+        {dynamicTags.map(t=><span key={t} className="tag-pill" style={{background:selTags.includes(t)?"#C4885A":"#F0EAE3",color:selTags.includes(t)?"#fff":"#8B7B72"}} onClick={()=>toggleTag(t)}>{t}</span>)}
+      </div>
+      <div style={{display:"flex",gap:6,marginBottom:16}}>
+        <input placeholder="新タグを追加（例: #タバコ）　Enterで確定" value={newTagInput} onChange={e=>setNewTagInput(e.target.value)}
+          onKeyDown={async e=>{
+            if(e.key!=="Enter") return; e.preventDefault();
+            const raw=newTagInput.trim(); if(!raw) return;
+            const name=raw.startsWith("#")?raw:"#"+raw;
+            if(!dynamicTags.includes(name)){const{error}=await supabase.from("tags").insert([{name,category:"custom"}]);if(!error) setDynamicTags(p=>[...p,name]);}
+            setSelTags(p=>p.includes(name)?p:[...p,name]); setNewTagInput("");
+          }}
+          style={{flex:1,border:"1px solid #E5DDD5",borderRadius:7,padding:"7px 11px",fontSize:13,background:"#FAF7F3",outline:"none",fontFamily:"inherit"}}/>
+        <button className="btn secondary btn-sm" onClick={async()=>{
+          const raw=newTagInput.trim(); if(!raw) return;
+          const name=raw.startsWith("#")?raw:"#"+raw;
+          if(!dynamicTags.includes(name)){const{error}=await supabase.from("tags").insert([{name,category:"custom"}]);if(!error) setDynamicTags(p=>[...p,name]);}
+          setSelTags(p=>p.includes(name)?p:[...p,name]); setNewTagInput("");
+        }}>+ 追加</button>
       </div>
 
+      {/* 効果効能 */}
       <p style={{fontSize:12,fontWeight:700,letterSpacing:".15em",color:"#B0A098",marginBottom:8}}>効果・効能（複数選択可）</p>
-      <div className="tag-grid" style={{marginBottom:16}}>
-        {allEffects.map(e=>(
-          <span key={e.id} className="tag-pill"
-            style={{background:selEffects.includes(e.id)?"#3D6B48":"#EAF0E8",color:selEffects.includes(e.id)?"#fff":"#3D6B48"}}
-            onClick={()=>toggleEffect(e.id)}>{e.name_ja}</span>
-        ))}
+      <div className="tag-grid" style={{marginBottom:8}}>
+        {allEffects.map(e=><span key={e.id} className="tag-pill" style={{background:selEffects.includes(e.id)?"#3D6B48":"#EAF0E8",color:selEffects.includes(e.id)?"#fff":"#3D6B48"}} onClick={()=>toggleEffect(e.id)}>{e.name_ja}</span>)}
+      </div>
+      <div style={{display:"flex",gap:6,marginBottom:16}}>
+        <input placeholder="新しい効果を追加（例: 花粉症対策）　Enterで確定" value={newEffectInput} onChange={e=>setNewEffectInput(e.target.value)}
+          onKeyDown={async e=>{
+            if(e.key!=="Enter") return; e.preventDefault();
+            const name=newEffectInput.trim(); if(!name) return;
+            if(allEffects.some(x=>x.name_ja===name)){setNewEffectInput(""); return;}
+            const{data,error}=await supabase.from("effects").insert([{name_ja:name,name_en:name,name_ko:name,name_zh:name,name_fr:name}]).select().single();
+            if(!error&&data){setAllEffects(p=>[...p,data]);setSelEffects(p=>[...p,data.id]);}
+            setNewEffectInput("");
+          }}
+          style={{flex:1,border:"1px solid #E5DDD5",borderRadius:7,padding:"7px 11px",fontSize:13,background:"#FAF7F3",outline:"none",fontFamily:"inherit"}}/>
+        <button className="btn secondary btn-sm" onClick={async()=>{
+          const name=newEffectInput.trim(); if(!name) return;
+          if(allEffects.some(x=>x.name_ja===name)){setNewEffectInput(""); return;}
+          const{data,error}=await supabase.from("effects").insert([{name_ja:name,name_en:name,name_ko:name,name_zh:name,name_fr:name}]).select().single();
+          if(!error&&data){setAllEffects(p=>[...p,data]);setSelEffects(p=>[...p,data.id]);}
+          setNewEffectInput("");
+        }}>+ 追加</button>
       </div>
 
+      {/* 紹介文 */}
       <div className="sep"/>
       <p style={{fontSize:12,fontWeight:700,letterSpacing:".15em",color:"#B0A098",marginBottom:12}}>紹介文（各言語）</p>
-      <div className="form-row">
-        <div className="fld"><label>日本語</label><textarea placeholder="商品の紹介文を入力..." value={f.desc_ja} onChange={e=>set("desc_ja",e.target.value)}/></div>
-      </div>
+      <div className="form-row"><div className="fld"><label>日本語</label><textarea placeholder="商品の紹介文を入力..." value={f.desc_ja} onChange={e=>set("desc_ja",e.target.value)}/></div></div>
       <div className="form-row cols2">
         <div className="fld"><label>English</label><textarea placeholder="Product description..." value={f.desc_en} onChange={e=>set("desc_en",e.target.value)}/></div>
         <div className="fld"><label>한국어</label><textarea placeholder="제품 설명..." value={f.desc_ko} onChange={e=>set("desc_ko",e.target.value)}/></div>
@@ -761,16 +644,17 @@ function ProductForm({ onSave, editId }) {
         <div className="fld"><label>中文</label><textarea placeholder="产品介绍..." value={f.desc_zh} onChange={e=>set("desc_zh",e.target.value)}/></div>
         <div className="fld"><label>Français</label><textarea placeholder="Description du produit..." value={f.desc_fr} onChange={e=>set("desc_fr",e.target.value)}/></div>
       </div>
+
+      {/* 成分 */}
       <p style={{fontSize:12,fontWeight:700,letterSpacing:".15em",color:"#B0A098",marginBottom:8}}>成分（公式サイトからコピー）</p>
-      <div className="form-row">
-        <div className="fld"><label>日本語</label><textarea placeholder="（例）アルコール、水、香料、リモネン..." value={f.ingredients} onChange={e=>set("ingredients",e.target.value)}/></div>
-      </div>
+      <div className="form-row"><div className="fld"><label>日本語</label><textarea placeholder="（例）アルコール、水、香料..." value={f.ingredients} onChange={e=>set("ingredients",e.target.value)}/></div></div>
       <div className="form-row cols3">
-        <div className="fld"><label>English</label><textarea placeholder="ALCOHOL DENAT., AQUA, PARFUM, LIMONENE..." value={f.ingr_en||""} onChange={e=>set("ingr_en",e.target.value)}/></div>
+        <div className="fld"><label>English</label><textarea placeholder="ALCOHOL DENAT., AQUA, PARFUM..." value={f.ingr_en||""} onChange={e=>set("ingr_en",e.target.value)}/></div>
         <div className="fld"><label>한국어</label><textarea placeholder="변성알코올, 정제수, 향료..." value={f.ingr_ko||""} onChange={e=>set("ingr_ko",e.target.value)}/></div>
         <div className="fld"><label>中文</label><textarea placeholder="变性酒精、水、香精..." value={f.ingr_zh||""} onChange={e=>set("ingr_zh",e.target.value)}/></div>
       </div>
 
+      {/* 購入リンク */}
       <div className="sep"/>
       <p style={{fontSize:12,fontWeight:700,letterSpacing:".15em",color:"#B0A098",marginBottom:12}}>購入リンク</p>
       {links.map((l,i)=>(
@@ -800,41 +684,167 @@ function ProductForm({ onSave, editId }) {
   );
 }
 
-function ProductList({ onToast, onEdit }) {
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading]   = useState(true);
 
+
+function AIImportForm({ onResult }) {
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+
+  const generate = async () => {
+    if (!url.trim()) return alert("URLを入力してください");
+    if (!apiKey) return alert(".envにVITE_ANTHROPIC_API_KEYを追加してください");
+    setLoading(true); setError(""); setResult(null);
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST",
+        headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        body:JSON.stringify({
+          model:"claude-sonnet-4-20250514",
+          max_tokens:3000,
+          tools:[{type:"web_search_20250305",name:"web_search"}],
+          messages:[{role:"user",content:`以下のフレグランス商品ページのURLを分析して、商品情報をJSONのみで返してください。他の文章は不要です。
+
+URL: ${url}
+
+返すJSONの形式（必ずこの形式で）：
+{
+  "name_ja": "日本語商品名（例：BE LIKE YOU オードパルファン）",
+  "name_en": "英語・ブランド公式名（例：BE LIKE YOU Eau de Parfum）",
+  "brand": "ブランド名",
+  "type": "香水",
+  "volume": "50ml",
+  "price": 12000,
+  "notes_top": ["ノート名1","ノート名2"],
+  "notes_mid": ["ノート名1","ノート名2"],
+  "notes_base": ["ノート名1","ノート名2"],
+  "tags": ["#フローラル","#デート"],
+  "effects": ["リラックス効果"],
+  "desc_ja": "日本語説明（100文字程度）",
+  "desc_en": "English description (about 100 chars)",
+  "desc_ko": "한국어 설명（100자 정도）",
+  "desc_zh": "中文说明（100字左右）",
+  "ingredients": "日本語成分リスト（公式より）",
+  "ingr_en": "English ingredients",
+  "ingr_ko": "한국어 성분",
+  "ingr_zh": "中文成分"
+}`}]
+        })
+      });
+      const data = await res.json();
+      const text = data.content?.filter(c=>c.type==="text").map(c=>c.text).join("");
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("JSON形式で返ってきませんでした");
+      const parsed = JSON.parse(jsonMatch[0]);
+      setResult(parsed);
+    } catch(e) { setError("エラー: "+e.message); }
+    setLoading(false);
+  };
+
+  return (
+    <div className="card">
+      <p style={{fontSize:13,color:"#6B5E55",lineHeight:1.7,marginBottom:16}}>
+        商品ページのURLを入力すると、AIが商品名・ノート・タグ・説明文（4言語）・成分を自動生成します。<br/>
+        <span style={{fontSize:11,color:"#B0A098"}}>※ 事前に.envに <code style={{background:"#F0EAE3",padding:"1px 6px",borderRadius:4}}>VITE_ANTHROPIC_API_KEY=sk-ant-...</code> を追加してください</span>
+      </p>
+      <div style={{display:"flex",gap:8,marginBottom:12}}>
+        <input placeholder="https://shiro-shiro.jp/ec/Item/..."
+          value={url} onChange={e=>setUrl(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&generate()}
+          style={{flex:1,border:"1px solid #E5DDD5",borderRadius:7,padding:"8px 11px",fontSize:13,background:"#FAF7F3",outline:"none",fontFamily:"inherit"}}/>
+        <button className="btn primary" onClick={generate} disabled={loading}>
+          {loading?"生成中...":"✨ AI生成"}
+        </button>
+      </div>
+      {error&&<p style={{fontSize:12,color:"#991B1B",marginBottom:12}}>{error}</p>}
+      {result&&(
+        <div>
+          <div style={{background:"#EAF3DE",borderRadius:8,padding:"10px 14px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <p style={{fontSize:12,color:"#3B6D11",fontWeight:500}}>✅ 生成完了！内容を確認して「商品登録に使う」を押してください</p>
+            <button className="btn primary" onClick={()=>onResult(result)}>商品登録に使う →</button>
+          </div>
+          <div style={{background:"#FAF7F3",borderRadius:8,padding:"12px 14px",fontSize:12,lineHeight:1.8,border:"1px solid #E5DDD5"}}>
+            <p><strong>商品名：</strong>{result.name_ja}</p>
+            <p><strong>英語名：</strong>{result.name_en}</p>
+            <p><strong>ブランド：</strong>{result.brand} / <strong>種別：</strong>{result.type}</p>
+            <p><strong>価格：</strong>¥{result.price?.toLocaleString()} / <strong>容量：</strong>{result.volume}</p>
+            <p><strong>TOP：</strong>{result.notes_top?.join(", ")}</p>
+            <p><strong>MID：</strong>{result.notes_mid?.join(", ")}</p>
+            <p><strong>BASE：</strong>{result.notes_base?.join(", ")}</p>
+            <p><strong>タグ：</strong>{result.tags?.join(" ")}</p>
+            <p><strong>説明（日）：</strong>{result.desc_ja}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BrandList({ onToast, onEdit }) {
+  const [brands, setBrands] = useState([]);
+  const [loading, setLoading] = useState(true);
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase.from("products")
-      .select("id,name,type,price,is_published,image_url,brands(name)")
-      .order("created_at", { ascending: false });
-    setProducts(data||[]);
+    const { data } = await supabase.from("brands").select("*").order("name");
+    setBrands(data||[]);
     setLoading(false);
   };
   useEffect(()=>{ load(); },[]);
-
-  const togglePublish = async (id, cur) => {
-    await supabase.from("products").update({ is_published:!cur }).eq("id",id);
-    onToast(!cur?"公開しました":"非公開にしました");
-    load();
+  const del = async (id,name) => {
+    if(!confirm(`「${name}」を削除しますか？`)) return;
+    await supabase.from("brands").delete().eq("id",id);
+    onToast("削除しました"); load();
   };
-  const del = async (id, name) => {
-    if (!confirm(`「${name}」を削除しますか？`)) return;
-    await supabase.from("products").delete().eq("id",id);
-    onToast("削除しました");
-    load();
-  };
-
-  if (loading) return <div className="card" style={{color:"#8B7B72",fontSize:13}}>読み込み中...</div>;
-  if (!products.length) return <div className="card" style={{color:"#8B7B72",fontSize:13}}>まだ商品が登録されていません。</div>;
-
+  if(loading) return <div className="card" style={{color:"#8B7B72",fontSize:13}}>読み込み中...</div>;
+  if(!brands.length) return <div className="card" style={{color:"#8B7B72",fontSize:13}}>まだブランドが登録されていません。</div>;
   return (
     <div className="card" style={{padding:0,overflow:"hidden"}}>
       <table className="tbl">
-        <thead>
-          <tr><th>画像</th><th>商品名</th><th>ブランド</th><th>種別</th><th>価格</th><th>公開</th><th>操作</th></tr>
-        </thead>
+        <thead><tr><th>ロゴ</th><th>ブランド名</th><th>略称</th><th>国</th><th>操作</th></tr></thead>
+        <tbody>
+          {brands.map(b=>(
+            <tr key={b.id}>
+              <td>
+                <div style={{width:44,height:44,borderRadius:7,background:`linear-gradient(145deg,${b.color_from||"#F8E6EC"},${b.color_to||"#EDD0D8"})`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+                  {b.logo_url?<img src={b.logo_url} style={{width:"100%",height:"100%",objectFit:"contain",padding:4}} alt=""/>
+                    :<span style={{fontFamily:"Georgia,serif",fontSize:b.abbr?.length>3?11:14,color:b.logo_color||"#8A2040"}}>{b.abbr||b.name?.slice(0,2)||"◈"}</span>}
+                </div>
+              </td>
+              <td style={{fontWeight:500}}>{b.name}</td>
+              <td style={{color:"#8B7B72"}}>{b.abbr||"—"}</td>
+              <td style={{color:"#8B7B72"}}>{b.country||"—"}</td>
+              <td style={{display:"flex",gap:6}}>
+                <button className="btn secondary btn-sm" onClick={()=>onEdit(b.id)}>編集</button>
+                <button className="btn danger btn-sm" onClick={()=>del(b.id,b.name)}>削除</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ProductList({ onToast, onEdit }) {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const load = async () => {
+    setLoading(true);
+    const { data } = await supabase.from("products").select("id,name,type,price,is_published,image_url,brands(name)").order("created_at",{ascending:false});
+    setProducts(data||[]);
+    setLoading(false);
+  };
+  useEffect(()=>{load();},[]);
+  const togglePublish = async (id,cur) => { await supabase.from("products").update({is_published:!cur}).eq("id",id); onToast(!cur?"公開しました":"非公開にしました"); load(); };
+  const del = async (id,name) => { if(!confirm(`「${name}」を削除しますか？`)) return; await supabase.from("products").delete().eq("id",id); onToast("削除しました"); load(); };
+  if (loading) return <div className="card" style={{color:"#8B7B72",fontSize:13}}>読み込み中...</div>;
+  if (!products.length) return <div className="card" style={{color:"#8B7B72",fontSize:13}}>まだ商品が登録されていません。</div>;
+  return (
+    <div className="card" style={{padding:0,overflow:"hidden"}}>
+      <table className="tbl">
+        <thead><tr><th>画像</th><th>商品名</th><th>ブランド</th><th>種別</th><th>価格</th><th>公開</th><th>操作</th></tr></thead>
         <tbody>
           {products.map(p=>(
             <tr key={p.id}>
@@ -858,17 +868,14 @@ function ProductList({ onToast, onEdit }) {
 }
 
 export default function Admin() {
-  const [page,   setPage]   = useState("dashboard");
-  const [toast,  setToast]  = useState("");
-  const [counts, setCounts] = useState({});
-  const [editId,  setEditId]  = useState(null);
+  const [page,       setPage]      = useState("dashboard");
+  const [toast,      setToast]     = useState("");
+  const [counts,     setCounts]    = useState({});
+  const [editId,     setEditId]    = useState(null);
+  const [editBrandId,setEditBrandId] = useState(null);
   const showToast = msg => { setToast(msg); setTimeout(()=>setToast(""),2500); };
-
-  const handleEdit = (id) => {
-    setEditId(id);
-    setPage("product-edit");
-  };
-
+  const handleEdit = (id) => { setEditId(id); setPage("product-edit"); };
+  const handleBrandEdit = (id) => { setEditBrandId(id); setPage("brand-edit"); };
   useEffect(()=>{
     Promise.all([
       supabase.from("products").select("*",{count:"exact",head:true}),
@@ -876,20 +883,23 @@ export default function Admin() {
       supabase.from("tags").select("*",{count:"exact",head:true}),
     ]).then(([p,b,t])=>setCounts({products:p.count,brands:b.count,tags:t.count}));
   },[]);
-
-  const nav = [["dashboard","ダッシュボード"],["brand-add","ブランド登録"],["product-add","商品登録"],["product-list","商品一覧"]];
-  const isEdit = page === "product-edit";
-  const titles = { dashboard:"ダッシュボード", "brand-add":"ブランド登録", "product-add":"商品登録", "product-list":"商品一覧", "product-edit":"商品を編集" };
-
+  const nav = [
+    ["dashboard","ダッシュボード"],
+    ["brand-add","ブランド登録"],
+    ["brand-list","ブランド一覧"],
+    ["product-add","商品登録"],
+    ["product-list","商品一覧"],
+  ];
+  const isEdit      = page==="product-edit";
+  const isBrandEdit = page==="brand-edit";
+  const titles = {dashboard:"ダッシュボード","brand-add":"ブランド登録","brand-list":"ブランド一覧","product-add":"商品登録","product-list":"商品一覧","product-edit":"商品を編集","brand-edit":"ブランドを編集"};
   return (
     <>
       <style>{CSS}</style>
       <div className="adm-wrap">
         <div className="adm-side">
           <div className="adm-logo"><span>Kaorido</span><small>ADMIN PANEL</small></div>
-          <div className="adm-nav">
-            {nav.map(([id,lbl])=>(<a key={id} className={page===id?"on":""} onClick={()=>setPage(id)}>{lbl}</a>))}
-          </div>
+          <div className="adm-nav">{nav.map(([id,lbl])=>(<a key={id} className={page===id?"on":""} onClick={()=>setPage(id)}>{lbl}</a>))}</div>
         </div>
         <div className="adm-main">
           <div className="adm-head">

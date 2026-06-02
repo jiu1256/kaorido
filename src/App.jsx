@@ -35,6 +35,21 @@ function formatPrice(price, currency) {
   const sym = CUR_SYM[currency] || "";
   return sym + Number(price).toLocaleString();
 }
+
+// バリアントが複数ある場合は価格帯を返す
+function formatPriceRange(product) {
+  const variants = Array.isArray(product.variants) ? product.variants.filter(v=>v.price) : [];
+  if (variants.length <= 1) {
+    return formatPrice(product.price, variants[0]?.currency||"JPY");
+  }
+  // 円換算価格（jpy_price優先、なければpriceそのまま）を使って最安・最高を計算
+  const prices = variants.map(v=>v.currency==="JPY"||!v.currency ? Number(v.price) : (v.jpy_price||Number(v.price))).filter(Boolean);
+  if (!prices.length) return formatPrice(product.price, "JPY");
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  if (min === max) return "¥" + min.toLocaleString();
+  return "¥" + min.toLocaleString() + "〜" + max.toLocaleString();
+}
 const COUNTRY_LIST = [
   {code:"JP",flag:"🇯🇵",name:"日本"},{code:"KR",flag:"🇰🇷",name:"韓国"},{code:"CN",flag:"🇨🇳",name:"中国"},
   {code:"US",flag:"🇺🇸",name:"アメリカ"},{code:"FR",flag:"🇫🇷",name:"フランス"},{code:"GB",flag:"🇬🇧",name:"イギリス"},
@@ -105,7 +120,96 @@ const CSS = `
 @keyframes spin{to{transform:rotate(360deg)}}
 .official-btn{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#C4885A;text-decoration:none;border:1px solid #C4885A;border-radius:20px;padding:5px 14px;transition:all .15s;cursor:pointer;}
 .official-btn:hover{background:#C4885A;color:#fff;}
+/* ── モバイル対応 ───────────────────────── */
+@media(max-width:640px){
+  .card:hover{transform:none;box-shadow:none;}
+  .brand-card:hover{transform:none;box-shadow:none;}
+  /* モーダルは下から出現 */
+  .mbox{border-radius:16px 16px 0 0;max-height:94vh;}
+  .ovl{align-items:flex-end;padding:0;}
+  /* PC用ナビを完全に隠す */
+  .sp-hide{display:none!important;}
+  /* スマホ下部ナビ */
+  .sp-nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #E5DDD5;display:flex!important;justify-content:space-around;align-items:center;padding:6px 0 env(safe-area-inset-bottom,8px);z-index:100;}
+  /* グリッド */
+  .sp-grid2{grid-template-columns:1fr 1fr!important;}
+  /* メインのパディング（下部ナビ分の余白） */
+  .sp-p{padding:12px 14px 72px!important;}
+  /* ヘッダー */
+  .sp-header{height:48px!important;padding:0 12px!important;}
+  .sp-logo{font-size:16px!important;}
+  /* ヒーロー */
+  .sp-hero{padding:14px 16px!important;gap:10px!important;}
+  .sp-hero-h1{font-size:16px!important;white-space:normal!important;}
+  .sp-hero-sub{display:none!important;}
+  .sp-hero-sym{font-size:28px!important;}
+  /* カテゴリ横スクロール */
+  .sp-cats{flex-wrap:nowrap!important;overflow-x:auto!important;padding-bottom:4px!important;-webkit-overflow-scrolling:touch!important;scrollbar-width:none!important;}
+  .sp-cats::-webkit-scrollbar{display:none;}
+  .sp-cats .cbt{font-size:11px!important;padding:4px 10px!important;flex-shrink:0!important;}
+  /* 購入ボタンを1列に */
+  .buy-grid{grid-template-columns:1fr!important;}
+  .si input{font-size:13px;}
+}
 `;
+
+// ── フレグランスノート辞書 ────────────────────────────────
+const NOTE_INFO = {
+  // シトラス
+  "ベルガモット":   {emoji:"🍋",en:"Bergamot",   desc:"イタリア産柑橘。爽やかな苦みと甘みが特徴のシトラス系の代表格。"},
+  "レモン":         {emoji:"🍋",en:"Lemon",      desc:"フレッシュで明るい柑橘感。クリーンで軽やかな印象を与える。"},
+  "グレープフルーツ":{emoji:"🍊",en:"Grapefruit", desc:"苦みと甘みが絶妙なシトラス。元気でエネルギッシュな香り。"},
+  "オレンジ":       {emoji:"🍊",en:"Orange",     desc:"明るく甘い柑橘。フルーティで親しみやすい香り。"},
+  "ライム":         {emoji:"🍋",en:"Lime",       desc:"シャープで清涼感のある柑橘。クリーンで爽快。"},
+  "ユズ":           {emoji:"🍋",en:"Yuzu",       desc:"日本原産の柑橘。清々しい和の柑橘感と独特の苦み。"},
+  "マンダリン":     {emoji:"🍊",en:"Mandarin",   desc:"甘くみずみずしいオレンジ系。柔らかく穏やかな香り。"},
+  // フルーティ
+  "アップル":       {emoji:"🍎",en:"Apple",      desc:"フレッシュな青リンゴからジューシーな赤リンゴまで。爽やかで甘い果実感。"},
+  "ピーチ":         {emoji:"🍑",en:"Peach",      desc:"官能的で甘美な果物の香り。温かみとジューシー感。"},
+  "アプリコット":   {emoji:"🍑",en:"Apricot",    desc:"甘くほんのり酸味のある果実感。優しくフルーティ。"},
+  "ポメグラネイト": {emoji:"🫐",en:"Pomegranate",desc:"甘酸っぱく複雑なザクロの香り。エキゾチックで深みがある。"},
+  "ベリー":         {emoji:"🫐",en:"Berry",      desc:"フレッシュな赤い果実の香り。甘くジューシーで生き生きとした印象。"},
+  "ブラックカラント":{emoji:"🫐",en:"Blackcurrant",desc:"濃厚でフルーティな黒スグリ。甘酸っぱく個性的な香り。"},
+  "ペアー":         {emoji:"🍐",en:"Pear",       desc:"フレッシュで軽やかな梨の香り。みずみずしく上品。"},
+  // フローラル
+  "ローズ":         {emoji:"🌹",en:"Rose",       desc:"香水の女王。華やかで甘く深みのある最もクラシックな花の香り。"},
+  "ジャスミン":     {emoji:"🌸",en:"Jasmine",    desc:"甘く官能的な白い花。香水の核として多くの名香に使われる。"},
+  "ピオニー":       {emoji:"🌸",en:"Peony",      desc:"フレッシュで華やかな牡丹の香り。ロマンティックで春らしい。"},
+  "ミュゲ":         {emoji:"🌱",en:"Lily of the Valley",desc:"すずらんの清楚で可憐な香り。フレッシュで純粋な白い花。"},
+  "フリージア":     {emoji:"🌼",en:"Freesia",    desc:"甘くフレッシュな春の花。軽やかで明るいフローラル。"},
+  "アイリス":       {emoji:"🌸",en:"Iris",       desc:"パウダリーで気品あるアヤメ。洗練された上質感を演出。"},
+  "チューリップ":   {emoji:"🌷",en:"Tulip",      desc:"繊細でフレッシュな春の花。ほのかに甘いクリーンフローラル。"},
+  "マグノリア":     {emoji:"🌸",en:"Magnolia",   desc:"白く大きな花。クリーミーで甘く、エレガントな存在感。"},
+  "ガーデニア":     {emoji:"🌸",en:"Gardenia",   desc:"クリーミーで甘い白い花。官能的でリッチな香り。"},
+  // グリーン・ハーバル
+  "グリーン":       {emoji:"🌿",en:"Green",      desc:"草や葉の青さ。自然でフレッシュなアウトドア感。"},
+  "バジル":         {emoji:"🌿",en:"Basil",      desc:"スパイシーで爽やかなハーブ。地中海の太陽を思わせる。"},
+  "ミント":         {emoji:"🌿",en:"Mint",       desc:"クールで清涼感のあるハーブ。フレッシュな清潔感を演出。"},
+  "ラベンダー":     {emoji:"💜",en:"Lavender",   desc:"穏やかでリラックスできるハーバルフローラル。安眠・鎮静効果も。"},
+  "タイム":         {emoji:"🌿",en:"Thyme",      desc:"爽やかでスパイシーな地中海のハーブ。"},
+  // ウッディ・アーシー
+  "サンダルウッド": {emoji:"🪵",en:"Sandalwood", desc:"クリーミーで温かい白檀の香り。東洋的で瞑想的な深み。"},
+  "シダー":         {emoji:"🌲",en:"Cedar",      desc:"ドライでクリーンな木の香り。すっきりとした森の清潔感。"},
+  "ヴェティバー":   {emoji:"🌾",en:"Vetiver",    desc:"スモーキーでアーシーな根の香り。深くミステリアス。"},
+  "パチョリ":       {emoji:"🌿",en:"Patchouli",  desc:"深くアーシーでエキゾチック。独特の個性と持続力。"},
+  "オード":         {emoji:"🪵",en:"Oud",        desc:"沈香の深くスモーキーな香り。中東の高級香木。非常に希少。"},
+  "ヒノキ":         {emoji:"🌲",en:"Hinoki",     desc:"日本の檜。清々しく清潔感のある和の木の香り。"},
+  "白檀":           {emoji:"🪵",en:"Sandalwood", desc:"クリーミーで温かみのある上品な木の香り。"},
+  // スパイシー
+  "ペッパー":       {emoji:"🌶",en:"Pepper",     desc:"刺激的でスパイシー。ダイナミックで個性的な香り。"},
+  "カルダモン":     {emoji:"🌶",en:"Cardamom",   desc:"エキゾチックで甘みのあるスパイス。温かく複雑な香り。"},
+  "シナモン":       {emoji:"🍂",en:"Cinnamon",   desc:"甘くスパイシーな温かみ。秋冬の定番スパイスノート。"},
+  "ジンジャー":     {emoji:"🫚",en:"Ginger",     desc:"ピリッとした生姜の刺激。フレッシュでエネルギッシュ。"},
+  // バニラ・グルマン
+  "バニラ":         {emoji:"🍦",en:"Vanilla",    desc:"甘くクリーミーな温かみ。官能的でリッチなベースノート。"},
+  "トンカビーン":   {emoji:"🫘",en:"Tonka Bean", desc:"クマリンと甘アーモンドの香り。甘く幸福感のあるグルマン系。"},
+  "キャラメル":     {emoji:"🍬",en:"Caramel",    desc:"甘く焦げた砂糖の香り。温かく幸福感のあるデザート系。"},
+  // ムスク・アンバー
+  "ムスク":         {emoji:"✨",en:"Musk",       desc:"肌に溶け込む官能的な白い香り。清潔感と温かみの定番。"},
+  "ホワイトムスク": {emoji:"✨",en:"White Musk", desc:"清潔でクリーンな現代的なムスク。石鹸のような爽やかさ。"},
+  "アンバー":       {emoji:"🫙",en:"Amber",      desc:"温かくリッチで甘い樹脂系香料。深みと官能性を与える。"},
+  "アンブレット":   {emoji:"🌸",en:"Ambrette",   desc:"植物性ムスク。柔らかくフルーティな動物的香り。"},
+};
 
 function Stars({n}) {
   return (
@@ -195,7 +299,7 @@ function Card({p,rank,fav,onFav,onClick}) {
         </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
           <Stars n={p.rating}/>
-          <span style={{fontSize:14,fontWeight:600,color:"#1C1815"}}>{formatPrice(p.price, p.variants?.[0]?.currency||"JPY")}</span>
+          <span style={{fontSize:14,fontWeight:600,color:"#1C1815"}}>{formatPriceRange(p)}</span>
         </div>
         <div style={{display:"flex",justifyContent:"space-between"}}>
           <span style={{fontSize:10,color:"#B0A098"}}>{p.volume}</span>
@@ -205,13 +309,18 @@ function Card({p,rank,fav,onFav,onClick}) {
     </div>
   );
 }
-
-function Modal({p,fav,onFav,recs,onClose,onSelect,onBrand,lang}) {
+function Modal({p,fav,onFav,recs,onClose,onSelect,onBrand,lang,onNoteClick}) {
   const [showIngr,setShowIngr]=useState(false);
   const [selVariant,setSelVariant]=useState(0);
   const [selImage,setSelImage]=useState(0);
   const t=T[lang]||T["日本語"];
-  const variants=Array.isArray(p.variants)&&p.variants.length>0?p.variants:null;
+  // バリアントを価格の安い順に並び替え
+  const rawVariants=Array.isArray(p.variants)&&p.variants.length>0?p.variants:null;
+  const variants=rawVariants?[...rawVariants].sort((a,b)=>{
+    const pa=a.currency==="JPY"||!a.currency?Number(a.price):(a.jpy_price||Number(a.price));
+    const pb=b.currency==="JPY"||!b.currency?Number(b.price):(b.jpy_price||Number(b.price));
+    return pa-pb;
+  }):null;
   const selVar=variants?variants[selVariant]:null;
   const varImgs=selVar?.images?.filter(Boolean)||[];
   const allImgs=varImgs.length>0?varImgs:(p.image_url?[p.image_url]:[]);
@@ -283,7 +392,19 @@ function Modal({p,fav,onFav,recs,onClose,onSelect,onBrand,lang}) {
               {[[t.top,p.top],[t.mid,p.mid],[t.base,p.base]].map(([lbl,notes])=>notes.length>0&&(
                 <div key={lbl} style={{display:"flex",gap:12,marginBottom:6,alignItems:"flex-start"}}>
                   <span style={{fontSize:10,fontWeight:700,color:"#B0A098",minWidth:68,letterSpacing:".05em",paddingTop:2,flexShrink:0}}>{lbl}</span>
-                  <span style={{fontSize:13,color:"#3C2820",lineHeight:1.5}}>{notes.join(" · ")}</span>
+                  <span style={{fontSize:13,color:"#3C2820",lineHeight:1.5}}>
+                  {notes.map((n,ni)=>(
+                    <span key={ni}>
+                      {ni>0&&<span style={{color:"#C4B8A0"}}> · </span>}
+                      <span style={{cursor:"pointer",borderBottom:"1px dashed #C4885A",color:"#3C2820",transition:"color .12s"}}
+                        onClick={()=>{if(onNoteClick) onNoteClick(n);}}
+                        onMouseEnter={e=>e.currentTarget.style.color="#C4885A"}
+                        onMouseLeave={e=>e.currentTarget.style.color="#3C2820"}>
+                        {n}
+                      </span>
+                    </span>
+                  ))}
+                </span>
                 </div>
               ))}
             </div>
@@ -310,11 +431,19 @@ function Modal({p,fav,onFav,recs,onClose,onSelect,onBrand,lang}) {
           })()}
           <div style={{marginBottom:20}}>
             <p style={{fontSize:10,fontWeight:700,letterSpacing:".15em",color:"#8B7B72",marginBottom:9}}>{t.buy.toUpperCase()}</p>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              {shops.map((s,i)=>(
+            <div className="buy-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {shops.filter(s=>s.shop_name).map((s,i)=>(
                 s.url
-                  ?<a key={i} href={s.url} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none"}}><button className="bbt fill" style={{width:"100%"}}>{t.buyPre}{s.shop_name}{t.buySuf}</button></a>
-                  :<button key={i} className="bbt out disabled">{t.buyPre}{s.shop_name}{t.buySuf}</button>
+                  ?<a key={i} href={s.url} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none"}}>
+                    <button className="bbt fill" style={{width:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"9px 6px",lineHeight:1.3}}>
+                      <span>{t.buyPre}{s.shop_name}{t.buySuf}</span>
+                      {s.current_price&&<span style={{fontSize:11,opacity:.85,marginTop:2}}>¥{Number(s.current_price).toLocaleString()}</span>}
+                    </button>
+                  </a>
+                  :<button key={i} className="bbt out disabled" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"9px 6px",lineHeight:1.3}}>
+                    <span>{t.buyPre}{s.shop_name}{t.buySuf}</span>
+                    {s.current_price&&<span style={{fontSize:11,opacity:.7,marginTop:2}}>¥{Number(s.current_price).toLocaleString()}</span>}
+                  </button>
               ))}
             </div>
           </div>
@@ -370,6 +499,69 @@ function AdStrip() {
   );
 }
 
+// ── ノート詳細モーダル ───────────────────────────────────────
+function NoteDetailModal({ noteName, products, onClose, onProduct }) {
+  const info = NOTE_INFO[noteName];
+  const familyColor = info ? (NOTE_FAMILY_COLOR[info.family]||"#C4885A") : "#C4885A";
+  // このノートを使っている商品
+  const relatedProds = products.filter(p=>
+    [...(p.top||[]),...(p.mid||[]),...(p.base||[])].some(n=>n===noteName)
+  ).slice(0,6);
+
+  return (
+    <div className="ovl" onClick={onClose}>
+      <div className="mbox" style={{maxWidth:480}} onClick={e=>e.stopPropagation()}>
+        {/* ヘッダー */}
+        <div style={{background:`linear-gradient(135deg,${familyColor}22,${familyColor}11)`,borderRadius:"16px 16px 0 0",padding:"24px 20px 16px",position:"relative"}}>
+          <button style={{position:"absolute",top:12,right:12,background:"rgba(255,255,255,.8)",border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
+            <svg width="11" height="11" viewBox="0 0 13 13"><path d="M2 2l9 9M11 2L2 11" stroke="#333" strokeWidth="1.8" strokeLinecap="round" fill="none"/></svg>
+          </button>
+          <div style={{display:"flex",alignItems:"center",gap:14}}>
+            <div style={{width:56,height:56,borderRadius:14,background:`${familyColor}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}>
+              {info?.emoji||"🌸"}
+            </div>
+            <div>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                <h2 style={{fontSize:20,fontWeight:500,color:"#1C1815"}}>{noteName}</h2>
+                {info?.en&&<span style={{fontSize:12,color:"#8B7B72"}}>{info.en}</span>}
+              </div>
+              {info?.family&&(
+                <span style={{fontSize:11,padding:"2px 10px",borderRadius:10,background:`${familyColor}22`,color:familyColor,fontWeight:600}}>{info.family}系</span>
+              )}
+            </div>
+          </div>
+        </div>
+        <div style={{padding:"16px 20px 24px"}}>
+          {info?.desc ? (
+            <p style={{fontSize:13,color:"#3C2820",lineHeight:1.85,marginBottom:relatedProds.length>0?18:0}}>{info.desc}</p>
+          ) : (
+            <p style={{fontSize:13,color:"#B0A098",marginBottom:relatedProds.length>0?18:0}}>このノートの情報は準備中です。</p>
+          )}
+          {relatedProds.length>0&&(
+            <>
+              <p style={{fontSize:10,fontWeight:700,letterSpacing:".15em",color:"#8B7B72",marginBottom:10}}>このノートを使った商品</p>
+              <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4}}>
+                {relatedProds.map(r=>(
+                  <div key={r.id} style={{flex:"0 0 100px",background:"#fff",border:"1px solid #E5DDD5",borderRadius:10,overflow:"hidden",cursor:"pointer"}} onClick={()=>{onProduct(r);onClose();}}>
+                    <div style={{height:58,background:r.image_url?"#fff":r.g,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      {r.image_url?<img src={r.image_url} style={{width:"100%",height:"100%",objectFit:"contain",padding:"4px"}} alt=""/>
+                        :<div style={{fontSize:22,opacity:.4}}>🌸</div>}
+                    </div>
+                    <div style={{padding:"5px 7px"}}>
+                      <p style={{fontSize:9,color:"#C4885A",fontWeight:600,marginBottom:1}}>{r.brand}</p>
+                      <p style={{fontSize:10,color:"#1C1815",lineHeight:1.3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{r.name}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Loading({msg}) {
   return <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"80px 20px",gap:16}}><div className="spin"/><p style={{fontSize:13,color:"#8B7B72"}}>{msg}</p></div>;
 }
@@ -390,7 +582,10 @@ export default function App() {
   const [favBrands,setFavBrands]=useState(new Set());
   const [sort,setSort]=useState("views");
   const [view,setView]=useState("home");
+  const [page,setPage]=useState(1);
+  const PER_PAGE = 24;
   const [modal,setModal]=useState(null);
+  const [noteModal,setNoteModal]=useState(null);
   const [showLang,setShowLang]=useState(false);
   const [tagOpen,setTagOpen]=useState(false);
   const [brandOpen,setBrandOpen]=useState(false);
@@ -400,6 +595,8 @@ export default function App() {
   const [brandCat,setBrandCat]=useState("all");
   const [brandTags,setBrandTags]=useState([]);
   const [simQuery,setSimQuery]=useState("");
+  const [noteSearchQuery,setNoteSearchQuery]=useState("");
+    const [noteSearch,setNoteSearch]=useState("");
 
   const allBrands=[...new Set(products.map(p=>p.brand))].sort();
   const filtBrands=allBrands.filter(b=>{
@@ -410,7 +607,7 @@ export default function App() {
   const openBrand=b=>{setCurBrand(b);setBrandCat("all");setBrandTags([]);setView("brand");setBrandOpen(false);};
   const toggleFav=id=>setFavs(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
   const toggleFavBrand=name=>setFavBrands(prev=>{const n=new Set(prev);n.has(name)?n.delete(name):n.add(name);return n;});
-  const toggleTag=tag=>{setSelTags(prev=>prev.includes(tag)?prev.filter(x=>x!==tag):[...prev,tag]);setView("search");};
+  const toggleTag=tag=>{setSelTags(prev=>prev.includes(tag)?prev.filter(x=>x!==tag):[...prev,tag]);setView("search");setPage(1);};
   const toggleBTag=tag=>setBrandTags(prev=>prev.includes(tag)?prev.filter(x=>x!==tag):[...prev,tag]);
   const openModal=p=>{setModal(p);trackView(p.id);};
 
@@ -425,7 +622,9 @@ export default function App() {
     if(selTags.length>0&&!selTags.some(t2=>p.tags.includes(t2)||p.scenes.includes(t2)))return false;
     return true;
   });
-  const display=view==="favorites"?sorted.filter(p=>favs.has(p.id)):filtered;
+  const allDisplay=view==="favorites"?sorted.filter(p=>favs.has(p.id)):filtered;
+  const totalPages=Math.max(1,Math.ceil(allDisplay.length/PER_PAGE));
+  const display=view==="favorites"?allDisplay:allDisplay.slice((page-1)*PER_PAGE, page*PER_PAGE);
   const brandProds=curBrand?sorted.filter(p=>{
     if(p.brand!==curBrand) return false;
     if(brandCat!=="all"&&p.type!==brandCat) return false;
@@ -441,13 +640,14 @@ export default function App() {
       <style>{CSS}</style>
       <div style={{fontFamily:"'Hiragino Kaku Gothic ProN','Noto Sans JP','Helvetica Neue',sans-serif",background:"#FAF7F3",minHeight:"100vh",color:"#1C1815"}}>
         <header style={{background:"#fff",borderBottom:"1px solid #E5DDD5",position:"sticky",top:0,zIndex:50}}>
-          <div style={{maxWidth:1100,margin:"0 auto",padding:"0 20px",display:"flex",alignItems:"center",justifyContent:"space-between",height:56}}>
+          <div className="sp-header" style={{maxWidth:1100,margin:"0 auto",padding:"0 20px",display:"flex",alignItems:"center",justifyContent:"space-between",height:56}}>
             <div className="lf" onClick={()=>{setView("home");setQuery("");setSelTags([]);setSelCat("all");setBrandQ("");}} style={{cursor:"pointer"}}>
-              <span style={{fontSize:21,fontWeight:400}}><span style={{color:"#C4885A"}}>Kaorido</span></span>
-              <span style={{display:"block",fontSize:9,letterSpacing:".32em",color:"#B0A098",marginTop:-3}}>FRAGRANCE GUIDE</span>
+              <span className="sp-logo" style={{fontSize:21,fontWeight:400}}><span style={{color:"#C4885A"}}>Kaorido</span></span>
+              <span className="sp-hide" style={{display:"block",fontSize:9,letterSpacing:".32em",color:"#B0A098",marginTop:-3}}>FRAGRANCE GUIDE</span>
             </div>
-            <nav style={{display:"flex",gap:18,alignItems:"center"}}>
-              {[["home",t.home],["ranking",t.ranking],["similar",t.simTitle],["favorites",`${t.favNav}${(favs.size+favBrands.size)>0?` (${favs.size+favBrands.size})`:""}`]].map(([id,lbl])=>(
+            {/* PC用ナビ（スマホでは非表示→下部固定に） */}
+            <nav className="sp-hide" style={{display:"flex",gap:18,alignItems:"center"}}>
+              {[["home",t.home],["ranking",t.ranking],["similar",t.simTitle],["notes","香りで探す"],["favorites",`${t.favNav}${(favs.size+favBrands.size)>0?` (${favs.size+favBrands.size})`:""}`]].map(([id,lbl])=>(
                 <span key={id} className={`nvb${view===id?" on":""}`} style={{color:view===id?"#C4885A":"#6B5E55"}} onClick={()=>setView(id)}>{lbl}</span>
               ))}
             </nav>
@@ -458,17 +658,32 @@ export default function App() {
               {showLang&&<div className="ldd">{LANGS.map((l,i)=>(<div key={i} className="ldi" onClick={()=>{setLangIdx(i);setShowLang(false);}}>{l}</div>))}</div>}
             </div>
           </div>
+          {/* スマホ用ボトムナビ */}
+          <nav className="sp-nav" style={{display:"none"}}>
+            {[
+              ["home",t.home,"M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"],
+              ["ranking",t.ranking,"M18 20V10M12 20V4M6 20v-6"],
+              ["note-search","香りから","M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"],
+              ["similar",t.simTitle,"M21 21l-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z"],
+              ["favorites",t.favNav,"M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"],
+            ].map(([id,lbl,path])=>(
+              <span key={id} className={`nvb${view===id?" on":""}`} style={{color:view===id?"#C4885A":"#9A8A82",display:"flex",flexDirection:"column",alignItems:"center",gap:2,fontSize:9,padding:"4px 10px",cursor:"pointer"}} onClick={()=>setView(id)}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={path}/></svg>
+                {id==="favorites"&&(favs.size+favBrands.size)>0?`${lbl}(${favs.size+favBrands.size})`:lbl}
+              </span>
+            ))}
+          </nav>
         </header>
 
-        <main style={{maxWidth:1100,margin:"0 auto",padding:"20px 20px 64px"}}>
+        <main className="sp-p" style={{maxWidth:1100,margin:"0 auto",padding:"20px 20px 64px"}}>
           {/* 検索エリア */}
           <div style={{marginBottom:20}}>
             <div className="si" style={{position:"relative",marginBottom:10}}>
               <svg style={{position:"absolute",left:15,top:"50%",transform:"translateY(-50%)"}} width="16" height="16" viewBox="0 0 17 17" fill="none"><circle cx="7" cy="7" r="5.5" stroke="#9A8A82" strokeWidth="1.4"/><path d="M11 11l4 4" stroke="#9A8A82" strokeWidth="1.4" strokeLinecap="round"/></svg>
-              <input placeholder={t.searchPh} value={query} onChange={e=>{setQuery(e.target.value);setView(e.target.value?"search":"home");}}/>
+              <input placeholder={t.searchPh} value={query} onChange={e=>{setQuery(e.target.value);setView(e.target.value?"search":"home");setPage(1);}}/>
             </div>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
-              {CATS.map(c=>(<button key={c.id} className={`cbt${selCat===c.id?" on":""}`} onClick={()=>{setSelCat(c.id);setView(query?"search":"home");}}>{c.l}</button>))}
+            <div className="sp-cats" style={{display:"flex",gap:6,flexWrap:"nowrap",overflowX:"auto",marginBottom:10,paddingBottom:4,WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
+              {CATS.map(c=>(<button key={c.id} className={`cbt${selCat===c.id?" on":""}`} style={{flexShrink:0}} onClick={()=>{setSelCat(c.id);setView(query?"search":"home");setPage(1);}}>{c.l}</button>))}
             </div>
             <div style={{marginBottom:10}}>
               <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
@@ -555,6 +770,30 @@ export default function App() {
                     {t.back}
                   </button>
                 </div>
+
+                {/* ── 香りの種類・紹介セクション ── */}
+                {(bInfo?.scent_intro||(bInfo?.scent_types?.length>0))&&(
+                  <div style={{background:"#fff",border:"1px solid #E5DDD5",borderRadius:12,padding:"18px 20px",marginBottom:18}}>
+                    <p style={{fontSize:11,fontWeight:700,letterSpacing:".15em",color:"#C4885A",marginBottom:10}}>この香りの特徴</p>
+                    {bInfo?.scent_intro&&(
+                      <p style={{fontSize:13,color:"#3C2820",lineHeight:1.85,marginBottom:bInfo?.scent_types?.length>0?14:0,whiteSpace:"pre-wrap"}}>{bInfo.scent_intro}</p>
+                    )}
+                    {bInfo?.scent_types?.length>0&&(
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10}}>
+                        {bInfo.scent_types.map((st,i)=>(
+                          <div key={i} style={{background:"#FAF7F3",borderRadius:9,padding:"12px 14px",border:"1px solid #EDE5DA"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:6}}>
+                              <span style={{width:6,height:6,borderRadius:"50%",background:"#C4885A",display:"inline-block",flexShrink:0}}/>
+                              <p style={{fontSize:12,fontWeight:700,color:"#1C1815"}}>{st.name}</p>
+                            </div>
+                            <p style={{fontSize:12,color:"#6B5E55",lineHeight:1.75}}>{st.desc}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:9}}>
                   <button className={`cbt${brandCat==="all"?" on":""}`} onClick={()=>setBrandCat("all")}>すべて</button>
                   {brandItems.map(c=>(<button key={c} className={`cbt${brandCat===c?" on":""}`} onClick={()=>setBrandCat(c)}>{c}</button>))}
@@ -562,7 +801,7 @@ export default function App() {
                 <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:16}}>
                   {brandTagList.map(tag=>(<span key={tag} className="tpill" style={{background:brandTags.includes(tag)?"#C4885A":"#F0EAE3",color:brandTags.includes(tag)?"#fff":"#8B7B72"}} onClick={()=>toggleBTag(tag)}>{tag}</span>))}
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:14}}>
+                <div className="sp-grid2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:14}}>
                   {brandProds.map(p=>(<Card key={p.id} p={p} rank={null} fav={favs.has(p.id)} onFav={toggleFav} onClick={()=>openModal(p)}/>))}
                 </div>
                 {brandProds.length===0&&<div style={{textAlign:"center",padding:"48px 20px",color:"#B0A098"}}><p>{t.noResult}</p></div>}
@@ -575,21 +814,79 @@ export default function App() {
             <>
               {/* ホームヒーロー */}
               {view==="home"&&!query&&selTags.length===0&&(
-                <div style={{background:"linear-gradient(135deg,#F5ECE0,#EDE0D4)",borderRadius:14,padding:"22px 32px",marginBottom:22,display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,overflow:"hidden"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:24,flex:1,minWidth:0}}>
-                    <div style={{fontSize:44,opacity:.18,fontFamily:"Georgia,serif",lineHeight:1,color:"#C4885A",flexShrink:0}}>◈</div>
+                <div className="sp-hero" style={{background:"linear-gradient(135deg,#F5ECE0,#EDE0D4)",borderRadius:14,padding:"22px 32px",marginBottom:22,display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,overflow:"hidden",flexWrap:"wrap"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:16,flex:1,minWidth:0}}>
+                    <div className="sp-hero-sym" style={{fontSize:44,opacity:.18,fontFamily:"Georgia,serif",lineHeight:1,color:"#C4885A",flexShrink:0}}>◈</div>
                     <div>
                       <p style={{fontSize:9,letterSpacing:".35em",color:"#C4885A",marginBottom:5}}>FIND YOUR SIGNATURE SCENT</p>
-                      <h1 className="lf" style={{fontSize:22,fontWeight:400,lineHeight:1.3,color:"#1C1815",whiteSpace:"nowrap"}}>あなただけの香りを見つけましょう</h1>
+                      <h1 className="lf sp-hero-h1" style={{fontSize:22,fontWeight:400,lineHeight:1.3,color:"#1C1815",whiteSpace:"nowrap"}}>あなただけの香りを見つけましょう</h1>
                     </div>
                   </div>
-                  <p style={{fontSize:12,color:"#8B7B72",lineHeight:1.7,flexShrink:0,textAlign:"right"}}>
+                  <p className="sp-hero-sub" style={{fontSize:12,color:"#8B7B72",lineHeight:1.7,flexShrink:0,textAlign:"right"}}>
                     香り・シーン・アイテムから<br/>最適な一本を提案します
                   </p>
                 </div>
               )}
 
               {/* 類似検索ページ */}
+              {/* 香りで探す（ノート検索） */}
+              {view==="notes"&&(
+                <div style={{marginBottom:20}}>
+                  <p style={{fontSize:14,fontWeight:500,color:"#1C1815",marginBottom:6}}>香りで探す</p>
+                  <p style={{fontSize:13,color:"#6B5E55",marginBottom:14,lineHeight:1.7}}>ノート（原料・素材）の名前から商品を探せます。クリックすると詳細も見られます。</p>
+                  <div className="si" style={{position:"relative",marginBottom:16}}>
+                    <svg style={{position:"absolute",left:15,top:"50%",transform:"translateY(-50%)"}} width="16" height="16" viewBox="0 0 17 17" fill="none"><circle cx="7" cy="7" r="5.5" stroke="#9A8A82" strokeWidth="1.4"/><path d="M11 11l4 4" stroke="#9A8A82" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                    <input placeholder="例: ベルガモット、ローズ、ムスク..." value={noteSearch} onChange={e=>setNoteSearch(e.target.value)}/>
+                  </div>
+                  {/* 登録済みのノート一覧 */}
+                  {!noteSearch&&(()=>{
+                    const allNotes=[...new Set(products.flatMap(p=>[...p.top,...p.mid,...p.base]).filter(Boolean))].sort();
+                    if(!allNotes.length) return <p style={{fontSize:12,color:"#B0A098",textAlign:"center",padding:"20px 0"}}>商品を登録するとノートが表示されます</p>;
+                    return (
+                      <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                        {allNotes.map(n=>(
+                          <span key={n} onClick={()=>setNoteModal(n)}
+                            style={{display:"inline-flex",alignItems:"center",gap:4,padding:"5px 12px",borderRadius:20,fontSize:12,cursor:"pointer",border:"1px solid #E5DDD5",background:"#FAF7F3",color:"#6B5E55",transition:"all .15s",userSelect:"none"}}
+                            onMouseEnter={e=>{e.currentTarget.style.background="#C4885A";e.currentTarget.style.color="#fff";e.currentTarget.style.borderColor="#C4885A";}}
+                            onMouseLeave={e=>{e.currentTarget.style.background="#FAF7F3";e.currentTarget.style.color="#6B5E55";e.currentTarget.style.borderColor="#E5DDD5";}}>
+                            <span style={{fontSize:13}}>{NOTE_INFO[n]?.emoji||"🌿"}</span>{n}
+                            <span style={{fontSize:10,background:"rgba(0,0,0,.07)",borderRadius:10,padding:"0 5px"}}>{products.filter(p=>[...p.top,...p.mid,...p.base].includes(n)).length}</span>
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                  {/* ノート検索結果 */}
+                  {noteSearch&&(()=>{
+                    const q=noteSearch.toLowerCase();
+                    const matchedNotes=[...new Set(products.flatMap(p=>[...p.top,...p.mid,...p.base]).filter(Boolean))].filter(n=>n.toLowerCase().includes(q));
+                    const matchedProds=products.filter(p=>[...p.top,...p.mid,...p.base].some(n=>n.toLowerCase().includes(q)));
+                    return (
+                      <>
+                        {matchedNotes.length>0&&(
+                          <div style={{marginBottom:16}}>
+                            <p style={{fontSize:11,color:"#8B7B72",marginBottom:8}}>ノート名</p>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                              {matchedNotes.map(n=>(
+                                <span key={n} onClick={()=>setNoteModal(n)}
+                                  style={{padding:"5px 14px",borderRadius:20,fontSize:12,cursor:"pointer",background:"#C4885A",color:"#fff",userSelect:"none"}}>
+                                  {NOTE_INFO[n]?.emoji||"🌿"} {n}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <p style={{fontSize:11,color:"#8B7B72",marginBottom:10}}>{matchedProds.length}件の商品</p>
+                        <div className="sp-grid2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:14}}>
+                          {matchedProds.map(p=>(<Card key={p.id} p={p} rank={null} fav={favs.has(p.id)} onFav={toggleFav} onClick={()=>openModal(p)}/>))}
+                        </div>
+                        {matchedProds.length===0&&<p style={{fontSize:13,color:"#B0A098",textAlign:"center",padding:"40px 0"}}>「{noteSearch}」を含む商品が見つかりません</p>}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
               {view==="similar"&&(
                 <div style={{marginBottom:20}}>
                   <p style={{fontSize:14,fontWeight:500,color:"#1C1815",marginBottom:6}}>{t.simTitle}</p>
@@ -615,7 +912,7 @@ export default function App() {
                             <p style={{fontSize:11,color:"#8B7B72",marginTop:3}}>この商品に似た {simProds.length} 件を表示中</p>
                           </div>
                         </div>
-                        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:14}}>
+                        <div className="sp-grid2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:14}}>
                           {simProds.map(p=>(<Card key={p.id} p={p} rank={null} fav={favs.has(p.id)} onFav={toggleFav} onClick={()=>openModal(p)}/>))}
                         </div>
                         {simProds.length===0&&<p style={{fontSize:13,color:"#B0A098",textAlign:"center",padding:"40px 0"}}>類似商品が見つかりませんでした</p>}
@@ -625,13 +922,13 @@ export default function App() {
                 </div>
               )}
 
-              {view!=="similar"&&(
+              {view!=="similar"&&view!=="note-search"&&(
                 <>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
                     <span style={{fontSize:13,color:"#8B7B72"}}>
                       {view==="favorites"&&`${t.favNav}（${display.length}${t.items}）`}
                       {view==="ranking"&&t.ranking}
-                      {(view==="home"||view==="search")&&`${display.length}${t.items}`}
+                      {(view==="home"||view==="search")&&`${allDisplay.length}${t.items}`}
                     </span>
                     <select className="ssel" value={sort} onChange={e=>setSort(e.target.value)}>
                       {SORTS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
@@ -670,7 +967,8 @@ export default function App() {
             </>
           )}
         </main>
-        {modal&&<Modal p={modal} fav={favs.has(modal.id)} onFav={toggleFav} recs={recs} lang={lang} onClose={()=>setModal(null)} onSelect={p=>setModal(p)} onBrand={openBrand}/>}
+        {modal&&<Modal p={modal} fav={favs.has(modal.id)} onFav={toggleFav} recs={recs} lang={lang} onClose={()=>setModal(null)} onSelect={p=>setModal(p)} onBrand={openBrand} onNoteClick={setNoteModal}/>}
+        {noteModal&&<NoteDetailModal noteName={noteModal} products={products} onClose={()=>setNoteModal(null)} onProduct={p=>{setModal(p);trackView(p.id);}}/>}
       </div>
     </>
   );
