@@ -687,8 +687,9 @@ export default function App() {
   const [showLang,setShowLang]=useState(false);
   const [tagOpen,setTagOpen]=useState(false);
   const [brandOpen,setBrandOpen]=useState(false);
-  const [filterTab,setFilterTab]=useState("all"); // "all"|"item"|"tag"|"brand"
+  const [filterTab,setFilterTab]=useState("all");
   const [scentOpen,setScentOpen]=useState(false);
+  const [selectedGuideBrand,setSelectedGuideBrand]=useState(null);
   const [brandQ,setBrandQ]=useState("");
   const [brandCountry,setBrandCountry]=useState("");
   const [curBrand,setCurBrand]=useState(null);
@@ -956,34 +957,83 @@ export default function App() {
                   <p style={{fontSize:12,color:"#8B7B72",marginBottom:20,lineHeight:1.7}}>香りの素材（ノート）をファミリーごとに解説しています。</p>
 
                   {/* ブランドの香り解説セクション */}
-                  {Object.values(brandMap).some(b=>b?.scent_intro||b?.scent_types?.length>0)&&(
-                    <div style={{marginBottom:28}}>
-                      <p style={{fontSize:11,fontWeight:700,letterSpacing:".15em",color:"#C4885A",marginBottom:12}}>ブランドの香り解説</p>
-                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                        {Object.entries(brandMap).filter(([,b])=>b?.scent_intro||b?.scent_types?.length>0).map(([brand,bInfo])=>(
-                          <div key={brand} style={{background:"#fff",border:"1px solid #E5DDD5",borderRadius:11,overflow:"hidden"}}>
-                            <button onClick={()=>openBrand(brand)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>
-                              <span style={{fontWeight:600,fontSize:13,color:"#1C1815"}}>{brand}</span>
-                              <span style={{fontSize:11,color:"#C4885A",display:"flex",alignItems:"center",gap:4}}>ブランドを見る
-                                <svg width="7" height="10" viewBox="0 0 7 10" fill="none"><path d="M1 1l5 4-5 4" stroke="#C4885A" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                              </span>
-                            </button>
-                            {bInfo?.scent_intro&&<p style={{fontSize:12,color:"#6B5E55",padding:"0 16px 12px",lineHeight:1.75}}>{bInfo.scent_intro}</p>}
-                            {bInfo?.scent_types?.length>0&&(
-                              <div style={{display:"flex",gap:7,padding:"0 16px 12px",flexWrap:"wrap"}}>
-                                {bInfo.scent_types.map((st,i)=>(
-                                  <div key={i} style={{background:"#FAF7F3",borderRadius:8,padding:"8px 12px",border:"1px solid #EDE5DA",flex:"1 1 180px"}}>
-                                    <p style={{fontSize:11,fontWeight:700,color:"#C4885A",marginBottom:3}}>{st.name}</p>
-                                    <p style={{fontSize:11,color:"#6B5E55",lineHeight:1.7}}>{st.desc}</p>
+                  {Object.values(brandMap).some(b=>b?.scent_intro||b?.scent_types?.length>0)&&(()=>{
+                    const guideBrands=Object.entries(brandMap).filter(([,b])=>b?.scent_intro||b?.scent_types?.length>0);
+                    const selB=selectedGuideBrand&&brandMap[selectedGuideBrand]?selectedGuideBrand:null;
+                    const selInfo=selB?brandMap[selB]:null;
+                    return(
+                      <div style={{marginBottom:28}}>
+                        <p style={{fontSize:11,fontWeight:700,letterSpacing:".15em",color:"#C4885A",marginBottom:10}}>ブランドの香り解説</p>
+                        {/* ブランド選択グリッド */}
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:8,marginBottom:12}}>
+                          {guideBrands.map(([brand,bInfo])=>{
+                            const grad=bInfo?.color_from&&bInfo?.color_to?`linear-gradient(135deg,${bInfo.color_from},${bInfo.color_to})`:"linear-gradient(135deg,#F5ECE0,#E8D9C8)";
+                            const isSel=selB===brand;
+                            return(
+                              <button key={brand} onClick={()=>setSelectedGuideBrand(isSel?null:brand)}
+                                style={{border:isSel?"2px solid #C4885A":"1px solid #E5DDD5",borderRadius:12,overflow:"hidden",background:"#fff",cursor:"pointer",fontFamily:"inherit",padding:0,transition:"all .15s",boxShadow:isSel?"0 2px 8px rgba(196,136,90,.2)":"none"}}>
+                                {/* グラデーションヘッダー */}
+                                <div style={{height:44,background:grad,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                  {bInfo?.logo_url
+                                    ?<img src={bInfo.logo_url} style={{height:26,objectFit:"contain"}} alt={brand}/>
+                                    :<span style={{fontSize:11,fontWeight:700,color:"rgba(0,0,0,.5)",letterSpacing:".06em"}}>{bInfo?.abbr||brand.slice(0,4)}</span>
+                                  }
+                                </div>
+                                <div style={{padding:"6px 8px",textAlign:"center"}}>
+                                  <p style={{fontSize:11,fontWeight:isSel?600:400,color:isSel?"#C4885A":"#3C2820",lineHeight:1.3}}>{brand}</p>
+                                  {(bInfo?.scent_types?.length>0)&&(
+                                    <p style={{fontSize:9.5,color:"#B0A098",marginTop:2}}>{bInfo.scent_types.length}系統</p>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {/* 選択したブランドの詳細 */}
+                        {selB&&selInfo&&(
+                          <div style={{background:"#fff",border:"1.5px solid #E8D0BC",borderRadius:14,overflow:"hidden",animation:"fadeIn .2s"}}>
+                            {/* ヘッダー */}
+                            <div style={{background:selInfo?.color_from&&selInfo?.color_to?`linear-gradient(135deg,${selInfo.color_from},${selInfo.color_to})`:"linear-gradient(135deg,#F5ECE0,#E8D9C8)",padding:"16px 18px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                                {selInfo?.logo_url
+                                  ?<img src={selInfo.logo_url} style={{height:32,objectFit:"contain"}} alt={selB}/>
+                                  :<span style={{fontSize:16,fontWeight:700,color:"rgba(0,0,0,.5)",letterSpacing:".08em"}}>{selInfo?.abbr||selB.slice(0,4)}</span>
+                                }
+                                <div>
+                                  <p style={{fontSize:14,fontWeight:600,color:"rgba(0,0,0,.6)"}}>{selB}</p>
+                                  {COUNTRY_LIST.find(c=>c.code===selInfo?.country)?.flag&&(
+                                    <p style={{fontSize:11,color:"rgba(0,0,0,.4)"}}>{COUNTRY_LIST.find(c=>c.code===selInfo.country).flag} {COUNTRY_LIST.find(c=>c.code===selInfo.country).name}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <button onClick={()=>openBrand(selB)} style={{fontSize:11,color:"rgba(0,0,0,.5)",background:"rgba(255,255,255,.5)",border:"1px solid rgba(0,0,0,.1)",borderRadius:20,padding:"4px 12px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:3,flexShrink:0}}>
+                                商品を見る
+                                <svg width="6" height="9" viewBox="0 0 7 10" fill="none"><path d="M1 1l5 4-5 4" stroke="rgba(0,0,0,.5)" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                              </button>
+                            </div>
+                            {/* イントロ */}
+                            {selInfo?.scent_intro&&(
+                              <p style={{fontSize:12,color:"#5C4A3E",lineHeight:1.85,padding:"14px 18px",borderBottom:selInfo?.scent_types?.length>0?"1px solid #F0EAE3":"none",whiteSpace:"pre-wrap"}}>{selInfo.scent_intro}</p>
+                            )}
+                            {/* 香りの種類 */}
+                            {selInfo?.scent_types?.length>0&&(
+                              <div style={{padding:"12px 14px",display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:7}}>
+                                {selInfo.scent_types.map((st,i)=>(
+                                  <div key={i} style={{background:"#FAF7F3",borderRadius:9,padding:"10px 13px",border:"1px solid #EDE5DA"}}>
+                                    <p style={{fontSize:11,fontWeight:700,color:"#C4885A",marginBottom:4}}>{st.name}</p>
+                                    <p style={{fontSize:11,color:"#6B5E55",lineHeight:1.75}}>{st.desc}</p>
                                   </div>
                                 ))}
                               </div>
                             )}
                           </div>
-                        ))}
+                        )}
+                        {!selB&&(
+                          <p style={{fontSize:11,color:"#B0A098",textAlign:"center",padding:"8px 0"}}>ブランドを選ぶと香りの解説が表示されます</p>
+                        )}
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* ノートファミリー別解説 */}
                   {Object.entries(NOTE_FAMILY_DEF).map(([family,fd])=>{

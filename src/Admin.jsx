@@ -853,7 +853,7 @@ function BrandList({onToast,onEdit}){
   const [brands,setBrands]=useState([]);const [loading,setLoading]=useState(true);
   const load=async()=>{setLoading(true);const{data}=await supabase.from("brands").select("*").order("name");setBrands(data||[]);setLoading(false);};
   useEffect(()=>{load();},[]);
-  const del=async(id,name)=>{if(!confirm(`「${name}」を削除しますか？`))return;await supabase.from("brands").delete().eq("id",id);onToast("削除しました");load();};
+  const del=async(id,name)=>{if(!confirm(`「${name}」を削除しますか？`))return;const{error}=await supabase.from("brands").delete().eq("id",id);if(error){alert(`削除できませんでした。\n\nSupabaseでDELETEポリシーを追加してください:\nCREATE POLICY "anon delete brands" ON brands FOR DELETE TO anon USING (TRUE);`);return;}onToast("削除しました");load();};
   if(loading)return<div className="card" style={{color:"#8B7B72",fontSize:13}}>読み込み中...</div>;
   if(!brands.length)return<div className="card" style={{color:"#8B7B72",fontSize:13}}>まだブランドが登録されていません。</div>;
   return (
