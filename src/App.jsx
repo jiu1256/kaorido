@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "./lib/supabase";
 import { useProducts, useBrands, trackView } from "./hooks/useProducts";
 
 const CATS = [
@@ -156,64 +157,75 @@ const CSS = `
 // ── フレグランスノート辞書 ────────────────────────────────
 const NOTE_INFO = {
   // シトラス
-  "ベルガモット":   {emoji:"🍋",en:"Bergamot",   desc:"イタリア産柑橘。爽やかな苦みと甘みが特徴のシトラス系の代表格。"},
-  "レモン":         {emoji:"🍋",en:"Lemon",      desc:"フレッシュで明るい柑橘感。クリーンで軽やかな印象を与える。"},
-  "グレープフルーツ":{emoji:"🍊",en:"Grapefruit", desc:"苦みと甘みが絶妙なシトラス。元気でエネルギッシュな香り。"},
-  "オレンジ":       {emoji:"🍊",en:"Orange",     desc:"明るく甘い柑橘。フルーティで親しみやすい香り。"},
-  "ライム":         {emoji:"🍋",en:"Lime",       desc:"シャープで清涼感のある柑橘。クリーンで爽快。"},
-  "ユズ":           {emoji:"🍋",en:"Yuzu",       desc:"日本原産の柑橘。清々しい和の柑橘感と独特の苦み。"},
-  "マンダリン":     {emoji:"🍊",en:"Mandarin",   desc:"甘くみずみずしいオレンジ系。柔らかく穏やかな香り。"},
+  "ベルガモット":   {emoji:"🍋",en:"Bergamot",   family:"シトラス",effects:["気分転換","集中力を高める","ストレス軽減"],desc:"イタリア産柑橘。爽やかな苦みと甘みが特徴のシトラス系の代表格。"},
+  "レモン":         {emoji:"🍋",en:"Lemon",      family:"シトラス",effects:["リフレッシュ","集中力を高める","気分転換"],desc:"フレッシュで明るい柑橘感。クリーンで軽やかな印象を与える。"},
+  "グレープフルーツ":{emoji:"🍊",en:"Grapefruit", family:"シトラス",effects:["気分転換","エネルギーアップ","目覚め効果"],desc:"苦みと甘みが絶妙なシトラス。元気でエネルギッシュな香り。"},
+  "オレンジ":       {emoji:"🍊",en:"Orange",     family:"シトラス",effects:["幸福感","リラックス","食欲増進"],desc:"明るく甘い柑橘。フルーティで親しみやすい香り。"},
+  "ライム":         {emoji:"🍋",en:"Lime",       family:"シトラス",effects:["リフレッシュ","気分転換","集中力を高める"],desc:"シャープで清涼感のある柑橘。クリーンで爽快。"},
+  "ユズ":           {emoji:"🍋",en:"Yuzu",       family:"シトラス",effects:["リフレッシュ","ストレス軽減","血行促進"],desc:"日本原産の柑橘。清々しい和の柑橘感と独特の苦み。"},
+  "マンダリン":     {emoji:"🍊",en:"Mandarin",   family:"シトラス",effects:["リラックス","幸福感","安眠補助"],desc:"甘くみずみずしいオレンジ系。柔らかく穏やかな香り。"},
   // フルーティ
-  "アップル":       {emoji:"🍎",en:"Apple",      desc:"フレッシュな青リンゴからジューシーな赤リンゴまで。爽やかで甘い果実感。"},
-  "ピーチ":         {emoji:"🍑",en:"Peach",      desc:"官能的で甘美な果物の香り。温かみとジューシー感。"},
-  "アプリコット":   {emoji:"🍑",en:"Apricot",    desc:"甘くほんのり酸味のある果実感。優しくフルーティ。"},
-  "ポメグラネイト": {emoji:"🫐",en:"Pomegranate",desc:"甘酸っぱく複雑なザクロの香り。エキゾチックで深みがある。"},
-  "ベリー":         {emoji:"🫐",en:"Berry",      desc:"フレッシュな赤い果実の香り。甘くジューシーで生き生きとした印象。"},
-  "ブラックカラント":{emoji:"🫐",en:"Blackcurrant",desc:"濃厚でフルーティな黒スグリ。甘酸っぱく個性的な香り。"},
-  "ペアー":         {emoji:"🍐",en:"Pear",       desc:"フレッシュで軽やかな梨の香り。みずみずしく上品。"},
+  "アップル":       {emoji:"🍎",en:"Apple",      family:"フルーティ",effects:["気分を高める","リフレッシュ","食欲増進"],desc:"フレッシュな青リンゴからジューシーな赤リンゴまで。爽やかで甘い果実感。"},
+  "ピーチ":         {emoji:"🍑",en:"Peach",      family:"フルーティ",effects:["幸福感","気分を高める","リラックス"],desc:"官能的で甘美な果物の香り。温かみとジューシー感。"},
+  "アプリコット":   {emoji:"🍑",en:"Apricot",    family:"フルーティ",effects:["幸福感","リラックス"],desc:"甘くほんのり酸味のある果実感。優しくフルーティ。"},
+  "ポメグラネイト": {emoji:"🫐",en:"Pomegranate",family:"フルーティ",effects:["気分転換","エネルギーアップ","抗酸化"],desc:"甘酸っぱく複雑なザクロの香り。エキゾチックで深みがある。"},
+  "ベリー":         {emoji:"🫐",en:"Berry",      family:"フルーティ",effects:["気分を高める","幸福感"],desc:"フレッシュな赤い果実の香り。甘くジューシーで生き生きとした印象。"},
+  "ブラックカラント":{emoji:"🫐",en:"Blackcurrant",family:"フルーティ",effects:["気分を高める","エネルギーアップ"],desc:"濃厚でフルーティな黒スグリ。甘酸っぱく個性的な香り。"},
+  "ペアー":         {emoji:"🍐",en:"Pear",       family:"フルーティ",effects:["リラックス","幸福感"],desc:"フレッシュで軽やかな梨の香り。みずみずしく上品。"},
   // フローラル
-  "ローズ":         {emoji:"🌹",en:"Rose",       desc:"香水の女王。華やかで甘く深みのある最もクラシックな花の香り。"},
-  "ジャスミン":     {emoji:"🌸",en:"Jasmine",    desc:"甘く官能的な白い花。香水の核として多くの名香に使われる。"},
-  "ピオニー":       {emoji:"🌸",en:"Peony",      desc:"フレッシュで華やかな牡丹の香り。ロマンティックで春らしい。"},
-  "ミュゲ":         {emoji:"🌱",en:"Lily of the Valley",desc:"すずらんの清楚で可憐な香り。フレッシュで純粋な白い花。"},
-  "フリージア":     {emoji:"🌼",en:"Freesia",    desc:"甘くフレッシュな春の花。軽やかで明るいフローラル。"},
-  "アイリス":       {emoji:"🌸",en:"Iris",       desc:"パウダリーで気品あるアヤメ。洗練された上質感を演出。"},
-  "チューリップ":   {emoji:"🌷",en:"Tulip",      desc:"繊細でフレッシュな春の花。ほのかに甘いクリーンフローラル。"},
-  "マグノリア":     {emoji:"🌸",en:"Magnolia",   desc:"白く大きな花。クリーミーで甘く、エレガントな存在感。"},
-  "ガーデニア":     {emoji:"🌸",en:"Gardenia",   desc:"クリーミーで甘い白い花。官能的でリッチな香り。"},
-  // グリーン・ハーバル
-  "グリーン":       {emoji:"🌿",en:"Green",      desc:"草や葉の青さ。自然でフレッシュなアウトドア感。"},
-  "バジル":         {emoji:"🌿",en:"Basil",      desc:"スパイシーで爽やかなハーブ。地中海の太陽を思わせる。"},
-  "ミント":         {emoji:"🌿",en:"Mint",       desc:"クールで清涼感のあるハーブ。フレッシュな清潔感を演出。"},
-  "ラベンダー":     {emoji:"💜",en:"Lavender",   desc:"穏やかでリラックスできるハーバルフローラル。安眠・鎮静効果も。"},
-  "タイム":         {emoji:"🌿",en:"Thyme",      desc:"爽やかでスパイシーな地中海のハーブ。"},
-  // ウッディ・アーシー
-  "サンダルウッド": {emoji:"🪵",en:"Sandalwood", desc:"クリーミーで温かい白檀の香り。東洋的で瞑想的な深み。"},
-  "シダー":         {emoji:"🌲",en:"Cedar",      desc:"ドライでクリーンな木の香り。すっきりとした森の清潔感。"},
-  "ヴェティバー":   {emoji:"🌾",en:"Vetiver",    desc:"スモーキーでアーシーな根の香り。深くミステリアス。"},
-  "パチョリ":       {emoji:"🌿",en:"Patchouli",  desc:"深くアーシーでエキゾチック。独特の個性と持続力。"},
-  "オード":         {emoji:"🪵",en:"Oud",        desc:"沈香の深くスモーキーな香り。中東の高級香木。非常に希少。"},
-  "ヒノキ":         {emoji:"🌲",en:"Hinoki",     desc:"日本の檜。清々しく清潔感のある和の木の香り。"},
-  "白檀":           {emoji:"🪵",en:"Sandalwood", desc:"クリーミーで温かみのある上品な木の香り。"},
+  "ローズ":         {emoji:"🌹",en:"Rose",       family:"フローラル",effects:["気分を高める","ストレス軽減","幸福感","自信を与える"],desc:"香水の女王。華やかで甘く深みのある最もクラシックな花の香り。"},
+  "ジャスミン":     {emoji:"🌸",en:"Jasmine",    family:"フローラル",effects:["気分を高める","リラックス","幸福感","自信を与える"],desc:"甘く官能的な白い花。香水の核として多くの名香に使われる。"},
+  "ピオニー":       {emoji:"🌸",en:"Peony",      family:"フローラル",effects:["気分を高める","幸福感","リラックス"],desc:"フレッシュで華やかな牡丹の香り。ロマンティックで春らしい。"},
+  "ミュゲ":         {emoji:"🌱",en:"Lily of the Valley",family:"フローラル",effects:["清潔感を与える","リフレッシュ","気分を高める"],desc:"すずらんの清楚で可憐な香り。フレッシュで純粋な白い花。"},
+  "フリージア":     {emoji:"🌼",en:"Freesia",    family:"フローラル",effects:["気分を高める","リフレッシュ","幸福感"],desc:"甘くフレッシュな春の花。軽やかで明るいフローラル。"},
+  "アイリス":       {emoji:"🌸",en:"Iris",       family:"フローラル",effects:["リラックス","自信を与える","エレガントな印象"],desc:"パウダリーで気品あるアヤメ。洗練された上質感を演出。"},
+  "チューリップ":   {emoji:"🌷",en:"Tulip",      family:"フローラル",effects:["気分を高める","幸福感"],desc:"繊細でフレッシュな春の花。ほのかに甘いクリーンフローラル。"},
+  "マグノリア":     {emoji:"🌸",en:"Magnolia",   family:"フローラル",effects:["リラックス","気分を高める"],desc:"白く大きな花。クリーミーで甘く、エレガントな存在感。"},
+  "ガーデニア":     {emoji:"🌸",en:"Gardenia",   family:"フローラル",effects:["リラックス","気分を高める"],desc:"クリーミーで甘い白い花。官能的でリッチな香り。"},
+  // ハーバル・グリーン
+  "グリーン":       {emoji:"🌿",en:"Green",      family:"グリーン",effects:["リフレッシュ","集中力を高める","ストレス軽減"],desc:"草や葉の青さ。自然でフレッシュなアウトドア感。"},
+  "バジル":         {emoji:"🌿",en:"Basil",      family:"ハーバル",effects:["集中力を高める","食欲増進","気分転換"],desc:"スパイシーで爽やかなハーブ。地中海の太陽を思わせる。"},
+  "ミント":         {emoji:"🌿",en:"Mint",       family:"ハーバル",effects:["集中力を高める","リフレッシュ","目覚め効果"],desc:"クールで清涼感のあるハーブ。フレッシュな清潔感を演出。"},
+  "ラベンダー":     {emoji:"💜",en:"Lavender",   family:"ハーバル",effects:["安眠補助","ストレス軽減","リラックス","鎮静"],desc:"穏やかでリラックスできるハーバルフローラル。安眠・鎮静効果も。"},
+  "タイム":         {emoji:"🌿",en:"Thyme",      family:"ハーバル",effects:["集中力を高める","リフレッシュ"],desc:"爽やかでスパイシーな地中海のハーブ。"},
+  // ウッディ
+  "サンダルウッド": {emoji:"🪵",en:"Sandalwood", family:"ウッディ",effects:["リラックス","集中力","瞑想補助","落ち着き"],desc:"クリーミーで温かい白檀の香り。東洋的で瞑想的な深み。"},
+  "シダー":         {emoji:"🌲",en:"Cedar",      family:"ウッディ",effects:["落ち着き","リラックス","ストレス軽減"],desc:"ドライでクリーンな木の香り。すっきりとした森の清潔感。"},
+  "ヴェティバー":   {emoji:"🌾",en:"Vetiver",    family:"ウッディ",effects:["ストレス軽減","集中力","落ち着き"],desc:"スモーキーでアーシーな根の香り。深くミステリアス。"},
+  "パチョリ":       {emoji:"🌿",en:"Patchouli",  family:"ウッディ",effects:["自信を与える","気分を高める"],desc:"深くアーシーでエキゾチック。独特の個性と持続力。"},
+  "オード":         {emoji:"🪵",en:"Oud",        family:"ウッディ",effects:["自信を与える","瞑想補助","高級感"],desc:"沈香の深くスモーキーな香り。中東の高級香木。非常に希少。"},
+  "ヒノキ":         {emoji:"🌲",en:"Hinoki",     family:"ウッディ",effects:["リラックス","ストレス軽減","リフレッシュ"],desc:"日本の檜。清々しく清潔感のある和の木の香り。"},
+  "白檀":           {emoji:"🪵",en:"Sandalwood", family:"ウッディ",effects:["瞑想補助","リラックス","安眠補助"],desc:"クリーミーで温かみのある上品な木の香り。"},
   // スパイシー
-  "ペッパー":       {emoji:"🌶",en:"Pepper",     desc:"刺激的でスパイシー。ダイナミックで個性的な香り。"},
-  "カルダモン":     {emoji:"🌶",en:"Cardamom",   desc:"エキゾチックで甘みのあるスパイス。温かく複雑な香り。"},
-  "シナモン":       {emoji:"🍂",en:"Cinnamon",   desc:"甘くスパイシーな温かみ。秋冬の定番スパイスノート。"},
-  "ジンジャー":     {emoji:"🫚",en:"Ginger",     desc:"ピリッとした生姜の刺激。フレッシュでエネルギッシュ。"},
-  // バニラ・グルマン
-  "バニラ":         {emoji:"🍦",en:"Vanilla",    desc:"甘くクリーミーな温かみ。官能的でリッチなベースノート。"},
-  "トンカビーン":   {emoji:"🫘",en:"Tonka Bean", desc:"クマリンと甘アーモンドの香り。甘く幸福感のあるグルマン系。"},
-  "キャラメル":     {emoji:"🍬",en:"Caramel",    desc:"甘く焦げた砂糖の香り。温かく幸福感のあるデザート系。"},
+  "ペッパー":       {emoji:"🌶",en:"Pepper",     family:"スパイシー",effects:["エネルギーアップ","集中力を高める","体を温める"],desc:"刺激的でスパイシー。ダイナミックで個性的な香り。"},
+  "カルダモン":     {emoji:"🌶",en:"Cardamom",   family:"スパイシー",effects:["食欲増進","エネルギーアップ","消化促進"],desc:"エキゾチックで甘みのあるスパイス。温かく複雑な香り。"},
+  "シナモン":       {emoji:"🍂",en:"Cinnamon",   family:"スパイシー",effects:["体を温める","食欲増進","血行促進"],desc:"甘くスパイシーな温かみ。秋冬の定番スパイスノート。"},
+  "ジンジャー":     {emoji:"🫚",en:"Ginger",     family:"スパイシー",effects:["体を温める","エネルギーアップ","消化促進"],desc:"ピリッとした生姜の刺激。フレッシュでエネルギッシュ。"},
+  // グルマン
+  "バニラ":         {emoji:"🍦",en:"Vanilla",    family:"グルマン",effects:["幸福感","リラックス","ストレス軽減"],desc:"甘くクリーミーな温かみ。官能的でリッチなベースノート。"},
+  "トンカビーン":   {emoji:"🫘",en:"Tonka Bean", family:"グルマン",effects:["幸福感","リラックス","安眠補助"],desc:"クマリンと甘アーモンドの香り。甘く幸福感のあるグルマン系。"},
+  "キャラメル":     {emoji:"🍬",en:"Caramel",    family:"グルマン",effects:["幸福感","リラックス","癒し"],desc:"甘く焦げた砂糖の香り。温かく幸福感のあるデザート系。"},
   // ムスク・アンバー
-  "ムスク":         {emoji:"✨",en:"Musk",       desc:"肌に溶け込む官能的な白い香り。清潔感と温かみの定番。"},
-  "ホワイトムスク": {emoji:"✨",en:"White Musk", desc:"清潔でクリーンな現代的なムスク。石鹸のような爽やかさ。"},
-  "アンバー":       {emoji:"🫙",en:"Amber",      desc:"温かくリッチで甘い樹脂系香料。深みと官能性を与える。"},
-  "アンブレット":   {emoji:"🌸",en:"Ambrette",   desc:"植物性ムスク。柔らかくフルーティな動物的香り。"},
+  "ムスク":         {emoji:"✨",en:"Musk",       family:"ムスク",effects:["リラックス","安眠補助","清潔感を与える"],desc:"肌に溶け込む官能的な白い香り。清潔感と温かみの定番。"},
+  "ホワイトムスク": {emoji:"✨",en:"White Musk", family:"ムスク",effects:["清潔感を与える","リラックス","安眠補助"],desc:"清潔でクリーンな現代的なムスク。石鹸のような爽やかさ。"},
+  "アンバー":       {emoji:"🫙",en:"Amber",      family:"ムスク",effects:["リラックス","温かみ","安眠補助"],desc:"温かくリッチで甘い樹脂系香料。深みと官能性を与える。"},
+  "アンブレット":   {emoji:"🌸",en:"Ambrette",   family:"ムスク",effects:["リラックス","幸福感"],desc:"植物性ムスク。柔らかくフルーティな動物的香り。"},
+};
+const NOTE_FAMILY_DEF = {
+  "シトラス":  {color:"#E8901A",bg:"linear-gradient(135deg,#FFFBEF,#FFF3CC)",border:"#F5D68A",icon:"🍋",desc:"明るく爽やかな柑橘の香り。リフレッシュ感と清潔感を与える。"},
+  "フローラル":{color:"#D45C8A",bg:"linear-gradient(135deg,#FFF5F8,#FFE4EE)",border:"#F0A8C8",icon:"🌸",desc:"花から生まれた華やかで優雅な香り。フェミニンな印象を演出。"},
+  "フルーティ":{color:"#D44080",bg:"linear-gradient(135deg,#FFF2F8,#FFD8EE)",border:"#EFA0C8",icon:"🍑",desc:"果実のみずみずしい甘さと弾けるような活力を持つ香り。"},
+  "ウッディ":  {color:"#7A5A14",bg:"linear-gradient(135deg,#F8F2E8,#EDE0C8)",border:"#C8A864",icon:"🪵",desc:"木や土から生まれた深みと落ち着きのある香り。"},
+  "ハーバル":  {color:"#3A7848",bg:"linear-gradient(135deg,#F2F8F2,#D8F0DC)",border:"#88C898",icon:"🌿",desc:"ハーブや葉の青さを持つ自然でフレッシュな香り。"},
+  "グリーン":  {color:"#3A6E48",bg:"linear-gradient(135deg,#F0F8F0,#D8EEE0)",border:"#80C090",icon:"🌱",desc:"草や葉の爽やかな青さ。森や野原を感じる自然な香り。"},
+  "スパイシー":{color:"#C03030",bg:"linear-gradient(135deg,#FFF2EE,#FFE0D8)",border:"#EE9888",icon:"🌶",desc:"刺激的でドラマティックなスパイスの香り。個性と温かみを演出。"},
+  "グルマン":  {color:"#B86020",bg:"linear-gradient(135deg,#FFF6EE,#FFE8C8)",border:"#E8B870",icon:"🍦",desc:"スイーツのような甘くリッチな香り。幸福感と温もりを与える。"},
+  "ムスク":    {color:"#7A6888",bg:"linear-gradient(135deg,#F8F4FC,#EDE4F4)",border:"#C0A8D8",icon:"✨",desc:"肌に溶け込む官能的でクリーンな香り。清潔感と深みが特徴。"},
 };
 const NOTE_FAMILY_COLOR = {
-  "シトラス":"#F5A623","フローラル":"#E8739A","フルーティ":"#E8A0BF",
-  "ウッディ":"#8B6914","ムスク":"#9B8EA8","オリエンタル":"#C4885A",
-  "グルマン":"#C47A3A","スパイシー":"#D04040","ハーバル":"#4A8C5C","グリーン":"#4A7C59",
+  "シトラス":"#E8901A","フローラル":"#D45C8A","フルーティ":"#D44080",
+  "ウッディ":"#7A5A14","ムスク":"#7A6888","オリエンタル":"#C4885A",
+  "グルマン":"#B86020","スパイシー":"#C03030","ハーバル":"#3A7848","グリーン":"#3A6E48",
 };
 
 function Stars({n}) {
@@ -237,21 +249,18 @@ function StarRating({ productId, currentRating }) {
 
   useEffect(()=>{
     // 平均評価を取得
-    import("./lib/supabase").then(({supabase})=>{
-      supabase.from("product_ratings").select("score").eq("product_id",productId).then(({data})=>{
-        if (data?.length) {
-          const scores = data.map(r=>r.score);
-          setAvg(scores.reduce((a,b)=>a+b,0)/scores.length);
-          setCount(scores.length);
-        }
-      });
+    supabase.from("product_ratings").select("score").eq("product_id",productId).then(({data})=>{
+      if (data?.length) {
+        const scores = data.map(r=>r.score);
+        setAvg(scores.reduce((a,b)=>a+b,0)/scores.length);
+        setCount(scores.length);
+      }
     });
   },[productId]);
 
   const submit = async (score) => {
     if (submitted) return;
     try {
-      const {supabase} = await import("./lib/supabase");
       await supabase.from("product_ratings").insert([{product_id:productId, score}]);
       localStorage.setItem("rate_"+productId, String(score));
       setMyRate(score); setSubmitted(true);
@@ -599,9 +608,19 @@ function NoteDetailModal({ noteName, products, onClose, onProduct }) {
         </div>
         <div style={{padding:"16px 20px 24px"}}>
           {info?.desc ? (
-            <p style={{fontSize:13,color:"#3C2820",lineHeight:1.85,marginBottom:relatedProds.length>0?18:0}}>{info.desc}</p>
+            <p style={{fontSize:13,color:"#3C2820",lineHeight:1.85,marginBottom:16}}>{info.desc}</p>
           ) : (
-            <p style={{fontSize:13,color:"#B0A098",marginBottom:relatedProds.length>0?18:0}}>このノートの情報は準備中です。</p>
+            <p style={{fontSize:13,color:"#B0A098",marginBottom:16}}>このノートの情報は準備中です。</p>
+          )}
+          {info?.effects?.length>0&&(
+            <div style={{marginBottom:relatedProds.length>0?18:0}}>
+              <p style={{fontSize:10,fontWeight:700,letterSpacing:".15em",color:"#8B7B72",marginBottom:8}}>一般的な効果・効能</p>
+              <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                {info.effects.map(ef=>(
+                  <span key={ef} style={{fontSize:11,padding:"3px 10px",borderRadius:12,background:`${familyColor}18`,color:familyColor,border:`1px solid ${familyColor}44`,fontWeight:500}}>{ef}</span>
+                ))}
+              </div>
+            </div>
           )}
           {relatedProds.length>0&&(
             <>
@@ -641,6 +660,19 @@ export default function App() {
   const t=T[lang]||T["日本語"];
   const {products,loading,error,refetch}=useProducts(lang);
   const {brandMap}=useBrands();
+  const [tagGroups,setTagGroups]=useState([]);
+  useEffect(()=>{
+    supabase.from("tags").select("name,category").order("name").then(({data})=>{
+      if(!data?.length)return;
+      const map={};
+      data.forEach(t=>{const c=t.category||"custom";if(!map[c])map[c]=[];map[c].push(t.name);});
+      const lbl={scent:"香りの系統",scene:"シーン・用途",mood:"印象・雰囲気",custom:"その他"};
+      const order=["scent","scene","mood","custom"];
+      const groups=order.filter(k=>map[k]?.length).map(k=>({label:lbl[k]||k,tags:map[k]}));
+      Object.keys(map).filter(k=>!order.includes(k)).forEach(k=>groups.push({label:k,tags:map[k]}));
+      setTagGroups(groups);
+    });
+  },[]);
   const [query,setQuery]=useState("");
   const [selTags,setSelTags]=useState([]);
   const [selCat,setSelCat]=useState("all");
@@ -655,6 +687,8 @@ export default function App() {
   const [showLang,setShowLang]=useState(false);
   const [tagOpen,setTagOpen]=useState(false);
   const [brandOpen,setBrandOpen]=useState(false);
+  const [filterTab,setFilterTab]=useState("all"); // "all"|"item"|"tag"|"brand"
+  const [scentOpen,setScentOpen]=useState(false);
   const [brandQ,setBrandQ]=useState("");
   const [brandCountry,setBrandCountry]=useState("");
   const [curBrand,setCurBrand]=useState(null);
@@ -670,7 +704,7 @@ export default function App() {
     if(brandCountry&&brandMap[b]?.country!==brandCountry) return false;
     return true;
   });
-  const openBrand=b=>{setCurBrand(b);setBrandCat("all");setBrandTags([]);setView("brand");setBrandOpen(false);};
+  const openBrand=b=>{setCurBrand(b);setBrandCat("all");setBrandTags([]);setView("brand");setBrandOpen(false);setScentOpen(false);};
   const toggleFav=id=>setFavs(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
   const toggleFavBrand=name=>setFavBrands(prev=>{const n=new Set(prev);n.has(name)?n.delete(name):n.add(name);return n;});
   const toggleTag=tag=>{setSelTags(prev=>prev.includes(tag)?prev.filter(x=>x!==tag):[...prev,tag]);setView("search");setPage(1);};
@@ -713,7 +747,7 @@ export default function App() {
             </div>
             {/* PC用ナビ（スマホでは非表示→下部固定に） */}
             <nav className="sp-hide" style={{display:"flex",gap:18,alignItems:"center"}}>
-              {[["home",t.home],["ranking",t.ranking],["similar",t.simTitle],["notes","香りで探す"],["favorites",`${t.favNav}${(favs.size+favBrands.size)>0?` (${favs.size+favBrands.size})`:""}`]].map(([id,lbl])=>(
+              {[["home",t.home],["ranking",t.ranking],["scent-guide","香りの図鑑"],["similar",t.simTitle],["notes","香りで探す"],["favorites",`${t.favNav}${(favs.size+favBrands.size)>0?` (${favs.size+favBrands.size})`:""}`]].map(([id,lbl])=>(
                 <span key={id} className={`nvb${view===id?" on":""}`} style={{color:view===id?"#C4885A":"#6B5E55"}} onClick={()=>setView(id)}>{lbl}</span>
               ))}
             </nav>
@@ -729,7 +763,7 @@ export default function App() {
             {[
               ["home",t.home,"M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"],
               ["ranking",t.ranking,"M18 20V10M12 20V4M6 20v-6"],
-              ["note-search","香りから","M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"],
+              ["scent-guide","図鑑","M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"],
               ["similar",t.simTitle,"M21 21l-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z"],
               ["favorites",t.favNav,"M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"],
             ].map(([id,lbl,path])=>(
@@ -748,39 +782,46 @@ export default function App() {
               <svg style={{position:"absolute",left:15,top:"50%",transform:"translateY(-50%)"}} width="16" height="16" viewBox="0 0 17 17" fill="none"><circle cx="7" cy="7" r="5.5" stroke="#9A8A82" strokeWidth="1.4"/><path d="M11 11l4 4" stroke="#9A8A82" strokeWidth="1.4" strokeLinecap="round"/></svg>
               <input placeholder={t.searchPh} value={query} onChange={e=>{setQuery(e.target.value);setView(e.target.value?"search":"home");setPage(1);}}/>
             </div>
-            <div className="sp-cats" style={{display:"flex",gap:6,flexWrap:"nowrap",overflowX:"auto",marginBottom:10,paddingBottom:4,WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
-              {CATS.map(c=>(<button key={c.id} className={`cbt${selCat===c.id?" on":""}`} style={{flexShrink:0}} onClick={()=>{setSelCat(c.id);setView(query?"search":"home");setPage(1);}}>{c.l}</button>))}
-            </div>
-            <div style={{marginBottom:10}}>
-              <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
-                <button className={`tog-btn${tagOpen?" active":""}`} onClick={()=>setTagOpen(!tagOpen)}>
-                  <svg width="13" height="11" viewBox="0 0 13 11" fill="none"><rect x="1" y="1" width="11" height="1.8" rx="0.9" fill="currentColor"/><rect x="3" y="4.6" width="7" height="1.8" rx="0.9" fill="currentColor"/><rect x="5" y="8.2" width="3" height="1.8" rx="0.9" fill="currentColor"/></svg>
-                  {t.tagBtn}{selTags.length>0&&` (${selTags.length}${t.selected})`}
-                  <svg width="8" height="5" viewBox="0 0 8 5" style={{transform:tagOpen?"rotate(180deg)":"none",transition:"transform .2s"}}><path d="M0.5 0.5L4 4L7.5 0.5" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>
-                </button>
-                {selTags.map(tag=>(<span key={tag} className="tpill" style={{background:"#C4885A",color:"#fff"}} onClick={()=>toggleTag(tag)}>{tag} ×</span>))}
-                {selTags.length>0&&<span style={{fontSize:11,color:"#C4885A",cursor:"pointer",textDecoration:"underline"}} onClick={()=>setSelTags([])}>{t.clearAll}</span>}
+            {/* ── アイテムから探す ── */}
+            <div style={{background:"#fff",border:"1px solid #E5DDD5",borderRadius:11,overflow:"hidden",marginBottom:10}}>
+              <div style={{display:"flex",borderBottom:"1px solid #F0EAE3"}}>
+                {[["all","すべて"],["item","アイテム"],["tag","タグ"],["brand","ブランド"]].map(([id,lbl])=>(
+                  <button key={id} onClick={()=>setFilterTab(id)}
+                    style={{flex:1,padding:"9px 4px",fontSize:11,fontWeight:filterTab===id?700:400,color:filterTab===id?"#C4885A":"#8B7B72",background:filterTab===id?"#FFF8F2":"none",border:"none",borderBottom:filterTab===id?"2px solid #C4885A":"2px solid transparent",cursor:"pointer",fontFamily:"inherit",transition:"all .15s"}}>
+                    {lbl}{id==="tag"&&selTags.length>0?` (${selTags.length})`:""}{id==="brand"&&curBrand&&view==="brand"?` ✓`:""}
+                  </button>
+                ))}
               </div>
-              {tagOpen&&<TagPanel groups={TAG_GROUPS} selected={selTags} onToggle={toggleTag}/>}
-            </div>
-            <div>
-              <button className={`tog-btn${brandOpen?" active":""}`} onClick={()=>setBrandOpen(!brandOpen)}>
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.4"/><path d="M4 6.5h5M6.5 4v5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-                {t.brandBtn}{curBrand&&view==="brand"&&` (${curBrand})`}
-                <svg width="8" height="5" viewBox="0 0 8 5" style={{transform:brandOpen?"rotate(180deg)":"none",transition:"transform .2s"}}><path d="M0.5 0.5L4 4L7.5 0.5" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>
-              </button>
-              {brandOpen&&(
-                <div style={{background:"#fff",border:"1px solid #E5DDD5",borderRadius:10,padding:"14px 16px",marginTop:8}}>
-                  <div className="si sm" style={{position:"relative",marginBottom:10}}>
+              {filterTab==="item"&&(
+                <div style={{padding:"10px 12px",display:"flex",flexWrap:"wrap",gap:5}}>
+                  {(()=>{
+                    const itemTypes=[...new Set(products.map(p=>p.type).filter(Boolean))].sort();
+                    return[<button key="all" className={`cbt${selCat==="all"?" on":""}`} onClick={()=>{setSelCat("all");setView(query?"search":"home");setPage(1);}}>すべて</button>,
+                    ...itemTypes.map(t2=>(<button key={t2} className={`cbt${selCat===t2?" on":""}`} onClick={()=>{setSelCat(t2);setView(query?"search":"home");setPage(1);}}>{t2}</button>))];
+                  })()}
+                </div>
+              )}
+              {filterTab==="tag"&&(
+                <div style={{padding:"10px 12px"}}>
+                  <TagPanel groups={tagGroups.length>0?tagGroups:TAG_GROUPS} selected={selTags} onToggle={toggleTag}/>
+                  {selTags.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:8,paddingTop:8,borderTop:"1px solid #F0EAE3"}}>
+                    {selTags.map(tag=>(<span key={tag} className="tpill" style={{background:"#C4885A",color:"#fff"}} onClick={()=>toggleTag(tag)}>{tag} ×</span>))}
+                    <span style={{fontSize:11,color:"#C4885A",cursor:"pointer",textDecoration:"underline",alignSelf:"center"}} onClick={()=>setSelTags([])}>{t.clearAll}</span>
+                  </div>}
+                </div>
+              )}
+              {filterTab==="brand"&&(
+                <div style={{padding:"10px 12px"}}>
+                  <div className="si sm" style={{position:"relative",marginBottom:8}}>
                     <svg style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)"}} width="13" height="13" viewBox="0 0 17 17" fill="none"><circle cx="7" cy="7" r="5.5" stroke="#9A8A82" strokeWidth="1.4"/><path d="M11 11l4 4" stroke="#9A8A82" strokeWidth="1.4" strokeLinecap="round"/></svg>
                     <input placeholder={t.brandPh} value={brandQ} onChange={e=>setBrandQ(e.target.value)}/>
                   </div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>
-                    <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",border:`1px solid ${!brandCountry?"#C4885A":"#E5DDD5"}`,background:!brandCountry?"#C4885A":"#FAF7F3",color:!brandCountry?"#fff":"#6B5E55",transition:"all .15s",userSelect:"none"}} onClick={()=>setBrandCountry("")}>すべて</span>
-                    {COUNTRY_LIST.map(c=>(<span key={c.code} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",border:`1px solid ${brandCountry===c.code?"#C4885A":"#E5DDD5"}`,background:brandCountry===c.code?"#C4885A":"#FAF7F3",color:brandCountry===c.code?"#fff":"#6B5E55",transition:"all .15s",userSelect:"none"}} onClick={()=>setBrandCountry(brandCountry===c.code?"":c.code)}><span style={{fontSize:14}}>{c.flag}</span>{c.name}</span>))}
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
+                    <span style={{padding:"3px 9px",borderRadius:20,fontSize:11,cursor:"pointer",border:`1px solid ${!brandCountry?"#C4885A":"#E5DDD5"}`,background:!brandCountry?"#C4885A":"#FAF7F3",color:!brandCountry?"#fff":"#6B5E55"}} onClick={()=>setBrandCountry("")}>すべて</span>
+                    {COUNTRY_LIST.map(c=>(<span key={c.code} style={{padding:"3px 9px",borderRadius:20,fontSize:11,cursor:"pointer",border:`1px solid ${brandCountry===c.code?"#C4885A":"#E5DDD5"}`,background:brandCountry===c.code?"#C4885A":"#FAF7F3",color:brandCountry===c.code?"#fff":"#6B5E55"}} onClick={()=>setBrandCountry(brandCountry===c.code?"":c.code)}>{c.flag}{c.name}</span>))}
                   </div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(118px,1fr))",gap:8}}>
-                    {filtBrands.map(b=>(<BrandCard key={b} brand={b} dbInfo={brandMap[b]} isOn={curBrand===b&&view==="brand"} onClick={()=>openBrand(b)} favBrands={favBrands} onFavBrand={toggleFavBrand}/>))}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(118px,1fr))",gap:7}}>
+                    {filtBrands.map(b=>(<BrandCard key={b} brand={b} dbInfo={brandMap[b]} isOn={curBrand===b&&view==="brand"} onClick={()=>{openBrand(b);setFilterTab("all");}} favBrands={favBrands} onFavBrand={toggleFavBrand}/>))}
                     {filtBrands.length===0&&<p style={{fontSize:12,color:"#B0A098",gridColumn:"1/-1"}}>該当なし</p>}
                   </div>
                 </div>
@@ -837,24 +878,37 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* ── 香りの種類・紹介セクション ── */}
+                {/* ── 香りの種類・紹介セクション（折りたたみ） ── */}
                 {(bInfo?.scent_intro||(bInfo?.scent_types?.length>0))&&(
-                  <div style={{background:"#fff",border:"1px solid #E5DDD5",borderRadius:12,padding:"18px 20px",marginBottom:18}}>
-                    <p style={{fontSize:11,fontWeight:700,letterSpacing:".15em",color:"#C4885A",marginBottom:10}}>この香りの特徴</p>
-                    {bInfo?.scent_intro&&(
-                      <p style={{fontSize:13,color:"#3C2820",lineHeight:1.85,marginBottom:bInfo?.scent_types?.length>0?14:0,whiteSpace:"pre-wrap"}}>{bInfo.scent_intro}</p>
-                    )}
-                    {bInfo?.scent_types?.length>0&&(
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10}}>
-                        {bInfo.scent_types.map((st,i)=>(
-                          <div key={i} style={{background:"#FAF7F3",borderRadius:9,padding:"12px 14px",border:"1px solid #EDE5DA"}}>
-                            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:6}}>
-                              <span style={{width:6,height:6,borderRadius:"50%",background:"#C4885A",display:"inline-block",flexShrink:0}}/>
-                              <p style={{fontSize:12,fontWeight:700,color:"#1C1815"}}>{st.name}</p>
-                            </div>
-                            <p style={{fontSize:12,color:"#6B5E55",lineHeight:1.75}}>{st.desc}</p>
+                  <div style={{background:"#fff",border:"1px solid #E5DDD5",borderRadius:12,marginBottom:18,overflow:"hidden"}}>
+                    <button onClick={()=>setScentOpen(p=>!p)}
+                      style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>
+                      <span style={{fontSize:11,fontWeight:700,letterSpacing:".15em",color:"#C4885A"}}>この香りの特徴</span>
+                      <span style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"#B0A098"}}>
+                        {scentOpen?"閉じる":"詳しく見る"}
+                        <svg width="8" height="5" viewBox="0 0 8 5" style={{transform:scentOpen?"rotate(180deg)":"none",transition:"transform .2s",flexShrink:0}}>
+                          <path d="M0.5 0.5L4 4L7.5 0.5" stroke="#B0A098" strokeWidth="1.2" fill="none" strokeLinecap="round"/>
+                        </svg>
+                      </span>
+                    </button>
+                    {scentOpen&&(
+                      <div style={{padding:"0 20px 18px"}}>
+                        {bInfo?.scent_intro&&(
+                          <p style={{fontSize:13,color:"#3C2820",lineHeight:1.85,marginBottom:bInfo?.scent_types?.length>0?14:0,whiteSpace:"pre-wrap"}}>{bInfo.scent_intro}</p>
+                        )}
+                        {bInfo?.scent_types?.length>0&&(
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10}}>
+                            {bInfo.scent_types.map((st,i)=>(
+                              <div key={i} style={{background:"#FAF7F3",borderRadius:9,padding:"12px 14px",border:"1px solid #EDE5DA"}}>
+                                <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:6}}>
+                                  <span style={{width:6,height:6,borderRadius:"50%",background:"#C4885A",display:"inline-block",flexShrink:0}}/>
+                                  <p style={{fontSize:12,fontWeight:700,color:"#1C1815"}}>{st.name}</p>
+                                </div>
+                                <p style={{fontSize:12,color:"#6B5E55",lineHeight:1.75}}>{st.desc}</p>
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        )}
                       </div>
                     )}
                   </div>
@@ -896,6 +950,84 @@ export default function App() {
 
               {/* 類似検索ページ */}
               {/* 香りで探す（ノート検索） */}
+              {view==="scent-guide"&&(
+                <div style={{marginBottom:20}}>
+                  <p style={{fontSize:14,fontWeight:500,color:"#1C1815",marginBottom:4}}>香りの図鑑</p>
+                  <p style={{fontSize:12,color:"#8B7B72",marginBottom:20,lineHeight:1.7}}>香りの素材（ノート）をファミリーごとに解説しています。</p>
+
+                  {/* ブランドの香り解説セクション */}
+                  {Object.values(brandMap).some(b=>b?.scent_intro||b?.scent_types?.length>0)&&(
+                    <div style={{marginBottom:28}}>
+                      <p style={{fontSize:11,fontWeight:700,letterSpacing:".15em",color:"#C4885A",marginBottom:12}}>ブランドの香り解説</p>
+                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                        {Object.entries(brandMap).filter(([,b])=>b?.scent_intro||b?.scent_types?.length>0).map(([brand,bInfo])=>(
+                          <div key={brand} style={{background:"#fff",border:"1px solid #E5DDD5",borderRadius:11,overflow:"hidden"}}>
+                            <button onClick={()=>openBrand(brand)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>
+                              <span style={{fontWeight:600,fontSize:13,color:"#1C1815"}}>{brand}</span>
+                              <span style={{fontSize:11,color:"#C4885A",display:"flex",alignItems:"center",gap:4}}>ブランドを見る
+                                <svg width="7" height="10" viewBox="0 0 7 10" fill="none"><path d="M1 1l5 4-5 4" stroke="#C4885A" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                              </span>
+                            </button>
+                            {bInfo?.scent_intro&&<p style={{fontSize:12,color:"#6B5E55",padding:"0 16px 12px",lineHeight:1.75}}>{bInfo.scent_intro}</p>}
+                            {bInfo?.scent_types?.length>0&&(
+                              <div style={{display:"flex",gap:7,padding:"0 16px 12px",flexWrap:"wrap"}}>
+                                {bInfo.scent_types.map((st,i)=>(
+                                  <div key={i} style={{background:"#FAF7F3",borderRadius:8,padding:"8px 12px",border:"1px solid #EDE5DA",flex:"1 1 180px"}}>
+                                    <p style={{fontSize:11,fontWeight:700,color:"#C4885A",marginBottom:3}}>{st.name}</p>
+                                    <p style={{fontSize:11,color:"#6B5E55",lineHeight:1.7}}>{st.desc}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ノートファミリー別解説 */}
+                  {Object.entries(NOTE_FAMILY_DEF).map(([family,fd])=>{
+                    const familyNotes=Object.entries(NOTE_INFO).filter(([,v])=>v.family===family);
+                    if(!familyNotes.length)return null;
+                    const allProdNotes=[...new Set(products.flatMap(p=>[...p.top,...p.mid,...p.base]).filter(Boolean))];
+                    const availNotes=familyNotes.filter(([n])=>allProdNotes.includes(n));
+                    return(
+                      <div key={family} style={{marginBottom:20,borderRadius:14,overflow:"hidden",border:`1px solid ${fd.border}`}}>
+                        {/* ファミリーヘッダー */}
+                        <div style={{background:fd.bg,padding:"14px 18px",display:"flex",alignItems:"center",gap:10}}>
+                          <span style={{fontSize:26}}>{fd.icon}</span>
+                          <div>
+                            <p style={{fontSize:14,fontWeight:700,color:fd.color}}>{family}系</p>
+                            <p style={{fontSize:11,color:"#6B5E55",lineHeight:1.6,marginTop:2}}>{fd.desc}</p>
+                          </div>
+                        </div>
+                        {/* ノート一覧 */}
+                        <div style={{background:"#fff",padding:"12px 14px",display:"flex",flexWrap:"wrap",gap:7}}>
+                          {familyNotes.map(([noteName,info])=>{
+                            const cnt=products.filter(p=>[...p.top,...p.mid,...p.base].includes(noteName)).length;
+                            const hasProds=cnt>0;
+                            return(
+                              <button key={noteName} onClick={()=>setNoteModal(noteName)}
+                                style={{display:"inline-flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,fontSize:12,cursor:"pointer",border:`1px solid ${hasProds?fd.border:"#E8E4E0"}`,background:hasProds?fd.bg:"#F8F6F4",color:hasProds?fd.color:"#B0A098",fontFamily:"inherit",transition:"all .15s"}}>
+                                <span style={{fontSize:14}}>{info.emoji}</span>
+                                {noteName}
+                                {hasProds&&<span style={{fontSize:10,background:`${fd.color}22`,borderRadius:10,padding:"0 5px",color:fd.color,fontWeight:600}}>{cnt}</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {/* 効果効能タグ（ファミリー共通） */}
+                        <div style={{background:fd.bg,borderTop:`1px solid ${fd.border}`,padding:"8px 14px",display:"flex",flexWrap:"wrap",gap:5}}>
+                          {[...new Set(familyNotes.flatMap(([,v])=>v.effects||[]))].slice(0,6).map(ef=>(
+                            <span key={ef} style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:"rgba(255,255,255,.7)",color:fd.color,border:`1px solid ${fd.border}`,fontWeight:500}}>{ef}</span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               {view==="notes"&&(
                 <div style={{marginBottom:20}}>
                   <p style={{fontSize:14,fontWeight:500,color:"#1C1815",marginBottom:6}}>香りで探す</p>
@@ -988,7 +1120,7 @@ export default function App() {
                 </div>
               )}
 
-              {view!=="similar"&&view!=="note-search"&&(
+              {view!=="similar"&&view!=="note-search"&&view!=="scent-guide"&&(
                 <>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
                     <span style={{fontSize:13,color:"#8B7B72"}}>
@@ -1022,8 +1154,37 @@ export default function App() {
                         <>
                           {view==="favorites"&&favBrands.size>0&&favs.size>0&&<p style={{fontSize:11,fontWeight:700,letterSpacing:".15em",color:"#B0A098",marginBottom:10}}>お気に入り商品</p>}
                           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:14}}>
-                            {display.map((p,i)=>(<Card key={p.id} p={p} rank={view==="home"||view==="ranking"?i:null} fav={favs.has(p.id)} onFav={toggleFav} onClick={()=>openModal(p)}/>))}
+                            {display.map((p,i)=>(<Card key={p.id} p={p} rank={(view==="home"||view==="ranking")&&page===1&&sort!=="price_asc"&&sort!=="price_desc"?i:null} fav={favs.has(p.id)} onFav={toggleFav} onClick={()=>openModal(p)}/>))}
                           </div>
+                          {/* ページネーション */}
+                          {view!=="favorites"&&totalPages>1&&(
+                            <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:6,marginTop:32,flexWrap:"wrap"}}>
+                              {/* 前へ */}
+                              <button onClick={()=>{setPage(p=>Math.max(1,p-1));window.scrollTo({top:0,behavior:"smooth"});}}
+                                disabled={page===1}
+                                style={{width:36,height:36,borderRadius:"50%",border:"1px solid #E5DDD5",background:page===1?"#F4F2EF":"#fff",color:page===1?"#C4B8AE":"#6B5E55",fontSize:14,cursor:page===1?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>‹</button>
+                              {/* ページ番号 */}
+                              {Array.from({length:totalPages},(_,i)=>i+1).map(n=>{
+                                // 現在ページの前後2ページ + 最初・最後は常に表示
+                                const show=n===1||n===totalPages||Math.abs(n-page)<=2;
+                                const isEllipsis=(n===2&&page>4)||(n===totalPages-1&&page<totalPages-3);
+                                if(!show&&!isEllipsis)return null;
+                                if(isEllipsis&&!show)return(
+                                  <span key={n} style={{width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",color:"#B0A098",fontSize:13}}>…</span>
+                                );
+                                return(
+                                  <button key={n} onClick={()=>{setPage(n);window.scrollTo({top:0,behavior:"smooth"});}}
+                                    style={{width:36,height:36,borderRadius:"50%",border:n===page?"2px solid #C4885A":"1px solid #E5DDD5",background:n===page?"#C4885A":"#fff",color:n===page?"#fff":"#6B5E55",fontSize:13,fontWeight:n===page?600:400,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s",fontFamily:"inherit"}}>
+                                    {n}
+                                  </button>
+                                );
+                              })}
+                              {/* 次へ */}
+                              <button onClick={()=>{setPage(p=>Math.min(totalPages,p+1));window.scrollTo({top:0,behavior:"smooth"});}}
+                                disabled={page===totalPages}
+                                style={{width:36,height:36,borderRadius:"50%",border:"1px solid #E5DDD5",background:page===totalPages?"#F4F2EF":"#fff",color:page===totalPages?"#C4B8AE":"#6B5E55",fontSize:14,cursor:page===totalPages?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>›</button>
+                            </div>
+                          )}
                         </>
                       )}
                     </>

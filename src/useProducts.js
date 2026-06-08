@@ -125,7 +125,47 @@ export function useBrands() {
   return { brands, brandMap, loading }
 }
 
-// ── 閲覧数トラッキング ────────────────────────────────────
+// ── タグ一覧フック ────────────────────────────────────────
+// 使い方: const { tagGroups } = useTags()
+export function useTags() {
+  const [tagGroups, setTagGroups] = useState([])
+
+  useEffect(() => {
+    supabase
+      .from('tags')
+      .select('name, category')
+      .order('name')
+      .then(({ data }) => {
+        if (!data?.length) return
+        // categoryでグルーピング
+        const groupMap = {}
+        data.forEach(t => {
+          const cat = t.category || 'custom'
+          if (!groupMap[cat]) groupMap[cat] = []
+          groupMap[cat].push(t.name)
+        })
+        // カテゴリ名を日本語ラベルに変換
+        const labelMap = {
+          scent:   '香りの系統',
+          scene:   'シーン・用途',
+          mood:    '印象・雰囲気',
+          custom:  'その他',
+        }
+        const ordered = ['scent','scene','mood','custom']
+        const groups = ordered
+          .filter(k => groupMap[k]?.length)
+          .map(k => ({ label: labelMap[k] || k, tags: groupMap[k] }))
+        // 残りのカテゴリも追加
+        Object.keys(groupMap).filter(k => !ordered.includes(k)).forEach(k => {
+          groups.push({ label: k, tags: groupMap[k] })
+        })
+        setTagGroups(groups)
+      })
+  }, [])
+
+  return { tagGroups }
+}
+
 // 商品を開いたときに呼ぶ。同じセッション・同じ商品は1回だけ記録
 export async function trackView(productId) {
   // セッションIDを取得（なければ新規生成）

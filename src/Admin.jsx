@@ -95,6 +95,12 @@ const saveColorHistory = (from, to) => {
   const h = getColorHistory().filter(x=>x!==key);
   h.unshift(key); localStorage.setItem(COLOR_KEY, JSON.stringify(h.slice(0,16)));
 };
+const TAG_KEY    = "kaorido_tags_history";
+const EFFECT_KEY = "kaorido_effects_history";
+const getTagHistory    = () => { try { return JSON.parse(localStorage.getItem(TAG_KEY)||"[]"); } catch { return []; } };
+const saveTagHistory   = (name) => { if(!name?.trim())return; const h=getTagHistory().filter(x=>x!==name); h.unshift(name); localStorage.setItem(TAG_KEY,JSON.stringify(h.slice(0,60))); };
+const getEffectHistory = () => { try { return JSON.parse(localStorage.getItem(EFFECT_KEY)||"[]"); } catch { return []; } };
+const saveEffectHistory= (id) => { if(!id)return; const h=getEffectHistory().filter(x=>x!==id); h.unshift(id); localStorage.setItem(EFFECT_KEY,JSON.stringify(h.slice(0,40))); };
 
 // 履歴チップ共通コンポーネント
 function HistChips({ items, onSelect, format }) {
@@ -410,8 +416,14 @@ function ProductForm({onSave,editId,initialData}){
   const addLink=()=>setLinks(p=>[...p,{shop_name:"Amazon",url:"",affiliate_code:"",current_price:""}]);
   const setLink=(i,k,v)=>setLinks(p=>p.map((x,j)=>j===i?{...x,[k]:v}:x));
   const removeLink=i=>setLinks(p=>p.filter((_,j)=>j!==i));
-  const toggleTag=t=>setSelTags(p=>p.includes(t)?p.filter(x=>x!==t):[...p,t]);
-  const toggleEffect=id=>setSelEffects(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
+  const toggleTag=t=>{
+    saveTagHistory(t);
+    setSelTags(p=>p.includes(t)?p.filter(x=>x!==t):[t,...p]);
+  };
+  const toggleEffect=id=>{
+    saveEffectHistory(id);
+    setSelEffects(p=>p.includes(id)?p.filter(x=>x!==id):[id,...p]);
+  };
   const addItemType=()=>{
     const name=newTypeInput.trim();if(!name||itemTypes.includes(name)){setNewTypeInput("");return;}
     const customs=[...getCustomTypes(),name];saveCustomTypes(customs);
@@ -504,7 +516,7 @@ function ProductForm({onSave,editId,initialData}){
     setNotes(p => {
       if (p[type].includes(name)) return p;
       const filtered = p[type].filter(Boolean);
-      return {...p, [type]: [...filtered, name]};
+      return {...p, [type]: [name, ...filtered]};
     });
   };
 
@@ -624,26 +636,85 @@ function ProductForm({onSave,editId,initialData}){
       {/* タグ */}
       <div className="sep"/>
       <p style={{fontSize:12,fontWeight:700,letterSpacing:".15em",color:"#B0A098",marginBottom:8}}>タグ（複数選択可）</p>
-      <div className="tag-grid" style={{marginBottom:8}}>
-        {dynamicTags.map(t=><span key={t} className="tag-pill" style={{background:selTags.includes(t)?"#C4885A":"#F0EAE3",color:selTags.includes(t)?"#fff":"#8B7B72"}} onClick={()=>toggleTag(t)}>{t}</span>)}
-      </div>
+      {(()=>{
+        const tagHist=getTagHistory();
+        const sorted=[...tagHist.filter(t=>dynamicTags.includes(t)),...dynamicTags.filter(t=>!tagHist.includes(t))];
+        return(
+          <>
+            {tagHist.length>0&&(
+              <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8,padding:"7px 10px",background:"#FAF7F3",borderRadius:7,border:"1px solid #E5DDD5"}}>
+                <span style={{fontSize:10,fontWeight:600,color:"#B0A098",marginRight:2,alignSelf:"center"}}>履歴：</span>
+                {tagHist.slice(0,40).map(t=>(
+                  <span key={t} onClick={()=>toggleTag(t)}
+                    style={{fontSize:11,padding:"2px 9px",borderRadius:10,cursor:"pointer",background:selTags.includes(t)?"#C4885A":"#F0EAE3",color:selTags.includes(t)?"#fff":"#8B7B72",userSelect:"none",transition:"all .12s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.background="#C4885A";e.currentTarget.style.color="#fff";}}
+                    onMouseLeave={e=>{e.currentTarget.style.background=selTags.includes(t)?"#C4885A":"#F0EAE3";e.currentTarget.style.color=selTags.includes(t)?"#fff":"#8B7B72";}}>{t}</span>
+                ))}
+              </div>
+            )}
+            <div className="tag-grid" style={{marginBottom:8}}>
+              {sorted.map(t=><span key={t} className="tag-pill" style={{background:selTags.includes(t)?"#C4885A":"#F0EAE3",color:selTags.includes(t)?"#fff":"#8B7B72"}} onClick={()=>toggleTag(t)}>{t}</span>)}
+            </div>
+          </>
+        );
+      })()}
       <div style={{display:"flex",gap:6,marginBottom:16}}>
         <input placeholder="新タグを追加（例: #タバコ）　Enterで確定" value={newTagInput} onChange={e=>setNewTagInput(e.target.value)}
-          onKeyDown={async e=>{if(e.key!=="Enter")return;e.preventDefault();const raw=newTagInput.trim();if(!raw)return;const name=raw.startsWith("#")?raw:"#"+raw;if(!dynamicTags.includes(name)){const{error}=await supabase.from("tags").insert([{name,category:"custom"}]);if(!error)setDynamicTags(p=>[...p,name]);}setSelTags(p=>p.includes(name)?p:[...p,name]);setNewTagInput("");}}
+          onKeyDown={async e=>{
+            if(e.key!=="Enter")return;e.preventDefault();
+            const raw=newTagInput.trim();if(!raw)return;
+            const name=raw.startsWith("#")?raw:"#"+raw;
+            if(!dynamicTags.includes(name)){
+              const{error}=await supabase.from("tags").upsert([{name,category:"custom"}],{onConflict:"name"});
+              if(!error)setDynamicTags(p=>[name,...p.filter(x=>x!==name)]);
+            }
+            saveTagHistory(name);
+            setSelTags(p=>p.includes(name)?p:[name,...p]);
+            setNewTagInput("");
+          }}
           style={{flex:1,border:"1px solid #E5DDD5",borderRadius:7,padding:"7px 11px",fontSize:13,background:"#FAF7F3",outline:"none",fontFamily:"inherit"}}/>
-        <button className="btn secondary btn-sm" onClick={async()=>{const raw=newTagInput.trim();if(!raw)return;const name=raw.startsWith("#")?raw:"#"+raw;if(!dynamicTags.includes(name)){const{error}=await supabase.from("tags").insert([{name,category:"custom"}]);if(!error)setDynamicTags(p=>[...p,name]);}setSelTags(p=>p.includes(name)?p:[...p,name]);setNewTagInput("");}}>+ 追加</button>
+        <button className="btn secondary btn-sm" onClick={async()=>{
+          const raw=newTagInput.trim();if(!raw)return;
+          const name=raw.startsWith("#")?raw:"#"+raw;
+          if(!dynamicTags.includes(name)){
+            const{error}=await supabase.from("tags").upsert([{name,category:"custom"}],{onConflict:"name"});
+            if(!error)setDynamicTags(p=>[name,...p.filter(x=>x!==name)]);
+          }
+          saveTagHistory(name);
+          setSelTags(p=>p.includes(name)?p:[name,...p]);
+          setNewTagInput("");
+        }}>+ 追加</button>
       </div>
 
       {/* 効果効能 */}
       <p style={{fontSize:12,fontWeight:700,letterSpacing:".15em",color:"#B0A098",marginBottom:8}}>効果・効能（複数選択可）</p>
-      <div className="tag-grid" style={{marginBottom:8}}>
-        {allEffects.map(e=><span key={e.id} className="tag-pill" style={{background:selEffects.includes(e.id)?"#3D6B48":"#EAF0E8",color:selEffects.includes(e.id)?"#fff":"#3D6B48"}} onClick={()=>toggleEffect(e.id)}>{e.name_ja}</span>)}
-      </div>
+      {(()=>{
+        const effHist=getEffectHistory();
+        const sorted=[...effHist.map(id=>allEffects.find(e=>e.id===id)).filter(Boolean),...allEffects.filter(e=>!effHist.includes(e.id))];
+        return(
+          <>
+            {effHist.length>0&&(
+              <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8,padding:"7px 10px",background:"#EAF0E8",borderRadius:7,border:"1px solid #C8DCC4"}}>
+                <span style={{fontSize:10,fontWeight:600,color:"#3D6B48",marginRight:2,alignSelf:"center"}}>履歴：</span>
+                {effHist.map(id=>{const e=allEffects.find(x=>x.id===id);if(!e)return null;return(
+                  <span key={id} onClick={()=>toggleEffect(id)}
+                    style={{fontSize:11,padding:"2px 9px",borderRadius:10,cursor:"pointer",background:selEffects.includes(id)?"#3D6B48":"#C8DCC4",color:selEffects.includes(id)?"#fff":"#3D6B48",userSelect:"none",transition:"all .12s"}}
+                    onMouseEnter={ev=>{ev.currentTarget.style.background="#3D6B48";ev.currentTarget.style.color="#fff";}}
+                    onMouseLeave={ev=>{ev.currentTarget.style.background=selEffects.includes(id)?"#3D6B48":"#C8DCC4";ev.currentTarget.style.color=selEffects.includes(id)?"#fff":"#3D6B48";}}>{e.name_ja}</span>
+                );})}
+              </div>
+            )}
+            <div className="tag-grid" style={{marginBottom:8}}>
+              {sorted.map(e=><span key={e.id} className="tag-pill" style={{background:selEffects.includes(e.id)?"#3D6B48":"#EAF0E8",color:selEffects.includes(e.id)?"#fff":"#3D6B48"}} onClick={()=>toggleEffect(e.id)}>{e.name_ja}</span>)}
+            </div>
+          </>
+        );
+      })()}
       <div style={{display:"flex",gap:6,marginBottom:16}}>
         <input placeholder="新しい効果を追加（例: 花粉症対策）　Enterで確定" value={newEffectInput} onChange={e=>setNewEffectInput(e.target.value)}
-          onKeyDown={async e=>{if(e.key!=="Enter")return;e.preventDefault();const name=newEffectInput.trim();if(!name)return;if(allEffects.some(x=>x.name_ja===name)){setNewEffectInput("");return;}const{data,error}=await supabase.from("effects").insert([{name_ja:name,name_en:name,name_ko:name,name_zh:name,name_fr:name}]).select().single();if(!error&&data){setAllEffects(p=>[...p,data]);setSelEffects(p=>[...p,data.id]);}setNewEffectInput("");}}
+          onKeyDown={async e=>{if(e.key!=="Enter")return;e.preventDefault();const name=newEffectInput.trim();if(!name)return;if(allEffects.some(x=>x.name_ja===name)){setNewEffectInput("");return;}const{data,error}=await supabase.from("effects").insert([{name_ja:name,name_en:name,name_ko:name,name_zh:name,name_fr:name}]).select().single();if(!error&&data){setAllEffects(p=>[data,...p]);saveEffectHistory(data.id);setSelEffects(p=>[data.id,...p]);}setNewEffectInput("");}}
           style={{flex:1,border:"1px solid #E5DDD5",borderRadius:7,padding:"7px 11px",fontSize:13,background:"#FAF7F3",outline:"none",fontFamily:"inherit"}}/>
-        <button className="btn secondary btn-sm" onClick={async()=>{const name=newEffectInput.trim();if(!name)return;if(allEffects.some(x=>x.name_ja===name)){setNewEffectInput("");return;}const{data,error}=await supabase.from("effects").insert([{name_ja:name,name_en:name,name_ko:name,name_zh:name,name_fr:name}]).select().single();if(!error&&data){setAllEffects(p=>[...p,data]);setSelEffects(p=>[...p,data.id]);}setNewEffectInput("");}}>+ 追加</button>
+        <button className="btn secondary btn-sm" onClick={async()=>{const name=newEffectInput.trim();if(!name)return;if(allEffects.some(x=>x.name_ja===name)){setNewEffectInput("");return;}const{data,error}=await supabase.from("effects").insert([{name_ja:name,name_en:name,name_ko:name,name_zh:name,name_fr:name}]).select().single();if(!error&&data){setAllEffects(p=>[data,...p]);saveEffectHistory(data.id);setSelEffects(p=>[data.id,...p]);}setNewEffectInput("");}}>+ 追加</button>
       </div>
 
       {/* 紹介文 */}
@@ -715,11 +786,13 @@ function AIImportForm({onResult}){
   const generate=async()=>{
     if(!url.trim())return alert("URLを入力してください");
     if(!apiKey)return alert(".envにVITE_ANTHROPIC_API_KEYを追加してください\n例: VITE_ANTHROPIC_API_KEY=sk-ant-...");
+    const cleanKey=apiKey.trim().replace(/[^\x00-\x7F]/g,"");
+    if(!cleanKey.startsWith("sk-ant-"))return alert("APIキーが正しくありません。\nsk-ant- で始まるキーを.envに設定してください。\n現在の値: "+apiKey.slice(0,30)+"...");
     setLoading(true);setError("");setResult(null);
     try{
       const res=await fetch("https://api.anthropic.com/v1/messages",{
         method:"POST",
-        headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        headers:{"Content-Type":"application/json","x-api-key":cleanKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",max_tokens:3000,
           tools:[{type:"web_search_20250305",name:"web_search"}],
