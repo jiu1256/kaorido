@@ -37,7 +37,11 @@
 
 ## 商品データ入力の自動化
 
-- 実行（リポジトリ直下から）: `node scripts/import-product.mjs --brand <ブランド名> [--save] [--headful] <URL...>`（--save なしは dry-run）
+- 実行（リポジトリ直下から）: `node scripts/import-product.mjs --brand <ブランド名> [--save] [--skip-notes] [--headful] <URL...>`（--save なしは dry-run）
+- **--skip-notes** … 抽出ノートを破棄するフラグ。ノートを人力補完する運用のブランド（SHIRO）では必ず付ける。claude-haiku-4-5 は説明文から香料名を拾ってノートに推測分類する癖があり、プロンプトでの矯正が不安定なため（負例・自己チェックを入れても再発）
+- **抽出ノートが空のときは fragrance_notes に触れない**（一括貼り付けで人力補完したノートを再取り込みで消さないためのガード）
+- **同名の登録済みが複数件ある場合は保存中止**（どれを更新すべきか不定のため。候補idを表示）
+- **登録済み商品への --save は注意**: update は desc/tags/effects/variants を抽出結果で**置き換える**。管理画面で人力修正した公開済み商品に実行するとキュレーション内容（variants内のimages配列等も）が失われる。現状は**新規登録用途**として使うこと
 - 抽出プロンプトのテンプレート: `prompts/extract-product.md`（`{{既存type一覧}}` 等のプレースホルダにマスタを差し込んで使用）
 - 抽出モデル: claude-haiku-4-5。JSONパース失敗時は1回だけリトライ
 - ページ取得は Playwright（ヘッドレスChromium）でレンダリング後のHTMLを使用。JS遅延描画のバリアント・価格を拾うため。起動失敗時は素のfetchにフォールバック

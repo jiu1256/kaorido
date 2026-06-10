@@ -34,7 +34,7 @@ const info = (msg) => console.log(`${c.cyan}${msg}${c.reset}`);
 
 // ---- 引数パース ----
 function parseArgs(argv) {
-  const args = { brand: null, save: false, headful: false, urls: [] };
+  const args = { brand: null, save: false, headful: false, skipNotes: false, urls: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--brand') {
@@ -43,6 +43,8 @@ function parseArgs(argv) {
       args.save = true;
     } else if (a === '--headful') {
       args.headful = true;
+    } else if (a === '--skip-notes') {
+      args.skipNotes = true;
     } else if (a.startsWith('--')) {
       err(`不明なオプション: ${a}`);
       process.exit(1);
@@ -292,7 +294,14 @@ async function saveProduct(supabase, brand, data, masters) {
   if (allProducts.error) throw new Error(`products 検索失敗: ${allProducts.error.message}`);
 
   const targetNorm = normalizeName(data.name);
-  const exact = allProducts.data.find((p) => normalizeName(p.name) === targetNorm);
+  const exacts = allProducts.data.filter((p) => normalizeName(p.name) === targetNorm);
+  if (exacts.length > 1) {
+    throw new Error(
+      `同名の登録済み商品が${exacts.length}件あるため保存を中止しました。先にDB側の重複を解消してください。\n` +
+        exacts.map((p) => `    候補: ${p.name} (id=${p.id})`).join('\n')
+    );
+  }
+  const exact = exacts[0];
   if (!exact) {
     const similar = allProducts.data.filter((p) => {
       const n = normalizeName(p.name);
@@ -346,11 +355,11 @@ async function saveProduct(supabase, brand, data, masters) {
     productId = ins.data.id;
   }
 
-  // 2) fragrance_notes（既存を消して入れ直し。note_type別に display_order 0始まり連番）
+  // 2) fragrance_notes（note_type別に display_order 0始まり連番）
   // DB/管理画面の note_type は top/mid/base（抽出JSONの middle は mid に変換）
+  // 抽出ノートが空のときは既存を保持する（管理画面の一括貼り付けで人力補完した
+  // ノートを、再取り込みで消さないため）
   const NOTE_TYPE_MAP = { top: 'top', middle: 'mid', base: 'base' };
-  const delNotes = await supabase.from('fragrance_notes').delete().eq('product_id', productId);
-  if (delNotes.error) throw new Error(`fragrance_notes 削除失敗: ${delNotes.error.message}`);
   const noteRows = [];
   for (const jsonKey of ['top', 'middle', 'base']) {
     (data.notes?.[jsonKey] ?? []).forEach((ingredientName, i) => {
@@ -358,8 +367,12 @@ async function saveProduct(supabase, brand, data, masters) {
     });
   }
   if (noteRows.length > 0) {
+    const delNotes = await supabase.from('fragrance_notes').delete().eq('product_id', productId);
+    if (delNotes.error) throw new Error(`fragrance_notes 削除失敗: ${delNotes.error.message}`);
     const insNotes = await supabase.from('fragrance_notes').insert(noteRows);
     if (insNotes.error) throw new Error(`fragrance_notes 挿入失敗: ${insNotes.error.message}`);
+  } else {
+    console.log(`  ${c.gray}（抽出ノートが空のため fragrance_notes は変更しません）${c.reset}`);
   }
 
   // 3) product_tags（既存を消して入れ直し）
@@ -458,7 +471,7 @@ function printDryRun(url, data, validation) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.brand) {
-    err('使い方: node scripts/import-product.mjs --brand <ブランド名> [--save] [--headful] <URL1> <URL2> ...');
+    err('使い方: node scripts/import-product.mjs --brand <ブランド名> [--save] [--skip-notes] [--headful] <URL1> <URL2> ...');
     err('--brand は必須です。');
     process.exit(1);
   }
@@ -496,6 +509,12 @@ async function main() {
         const html = await fetcher.fetchHtml(url);
         const pageText = htmlToText(html, url);
         const data = await extractProduct(anthropic, systemPrompt, url, pageText);
+        if (args.skipNotes) {
+          // ノートを人力補完する運用のブランド向け（SHIRO等）。抽出ノートは破棄し、
+          // 保存時も既存 fragrance_notes に触れない（空ノートは保存スキップされるため）
+          data.notes = { top: [], middle: [], base: [] };
+          console.log(`${c.gray}--skip-notes: 抽出ノートを破棄しました（既存ノートは保持されます）${c.reset}`);
+        }
         const validation = validateProduct(data, masters);
         printDryRun(url, data, validation);
 
