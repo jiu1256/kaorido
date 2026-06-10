@@ -26,3 +26,5 @@ dist-ssr
 # 環境変数（.env.example を参照）
 .env
 
+urls.txt
+
