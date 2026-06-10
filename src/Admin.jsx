@@ -384,6 +384,8 @@ function ProductForm({onSave,editId,initialData}){
   const [itemTypes,setItemTypes]=useState([...DEFAULT_ITEM_TYPES,...getCustomTypes()]);
   const [newTypeInput,setNewTypeInput]=useState("");
   const [loadingEdit,setLoadingEdit]=useState(false);
+  const [bulkNotes,setBulkNotes]=useState("");
+  const [bulkNotesMsg,setBulkNotesMsg]=useState("");
   const editLoadedRef=useRef(null);
   const [f,setF]=useState({
     brand_id:"",name:initialData?.name_ja||"",type:initialData?.type||"香水",
@@ -413,6 +415,25 @@ function ProductForm({onSave,editId,initialData}){
   const addNote=type=>setNotes(p=>({...p,[type]:[...p[type],""]}));
   const setNote=(type,i,v)=>setNotes(p=>({...p,[type]:p[type].map((x,j)=>j===i?v:x)}));
   const removeNote=(type,i)=>setNotes(p=>({...p,[type]:p[type].filter((_,j)=>j!==i)}));
+  // 一括貼り付け: 「TOP レモン、オレンジ MIDDLE ローズ LAST ムスク」形式の自由テキストを各ノート欄に振り分ける
+  const applyBulkNotes=()=>{
+    const LABEL_RE=/(TOP|MIDDLE|MID|LAST|BASE|トップ|ミドル|ラスト|ベース)\s*(?:ノート|NOTES?)?\s*[:：]?/gi;
+    const tierOf=l=>{const u=l.toUpperCase();if(u==="TOP"||l==="トップ")return"top";if(u==="MIDDLE"||u==="MID"||l==="ミドル")return"mid";return"base";};// LAST/ラスト/BASE/ベース → base
+    const matches=[...bulkNotes.matchAll(LABEL_RE)];
+    if(matches.length===0){setBulkNotesMsg("⚠ ラベル（TOP/MIDDLE/LAST/BASE/トップ/ミドル/ラスト/ベース）が見つかりません");return;}
+    const parsed={};
+    matches.forEach((m,idx)=>{
+      const tier=tierOf(m[1]);
+      const start=m.index+m[0].length;
+      const end=idx+1<matches.length?matches[idx+1].index:bulkNotes.length;
+      const items=bulkNotes.slice(start,end).split(/[、,，・/\s]+/).map(s=>s.trim()).filter(Boolean);
+      if(items.length)parsed[tier]=[...(parsed[tier]||[]),...items];
+    });
+    if(Object.keys(parsed).length===0){setBulkNotesMsg("⚠ ラベルは見つかりましたが、ノート名がありません");return;}
+    setNotes(p=>({...p,...parsed}));
+    Object.values(parsed).flat().forEach(saveNoteHistory);
+    setBulkNotesMsg("振り分けました: "+["top","mid","base"].filter(t=>parsed[t]).map(t=>`${t.toUpperCase()} ${parsed[t].length}件`).join(" / "));
+  };
   const addLink=()=>setLinks(p=>[...p,{shop_name:"Amazon",url:"",affiliate_code:"",current_price:""}]);
   const setLink=(i,k,v)=>setLinks(p=>p.map((x,j)=>j===i?{...x,[k]:v}:x));
   const removeLink=i=>setLinks(p=>p.filter((_,j)=>j!==i));
@@ -616,6 +637,17 @@ function ProductForm({onSave,editId,initialData}){
       {/* フレグランスノート */}
       <div className="sep"/>
       <p style={{fontSize:12,fontWeight:700,letterSpacing:".15em",color:"#B0A098",marginBottom:12}}>フレグランスノート</p>
+      {/* 一括貼り付け */}
+      <div style={{marginBottom:14}}>
+        <textarea value={bulkNotes} onChange={e=>setBulkNotes(e.target.value)} rows={2}
+          placeholder="一括貼り付け 例: TOP レモン、オレンジ MIDDLE ローズ LAST ムスク"
+          style={{width:"100%",fontSize:12,padding:8,border:"1px solid #E5DDD5",borderRadius:6,resize:"vertical",boxSizing:"border-box"}}/>
+        <div style={{display:"flex",gap:8,alignItems:"center",marginTop:4,flexWrap:"wrap"}}>
+          <button className="btn secondary btn-sm" onClick={applyBulkNotes}>ノートに振り分け</button>
+          <span style={{fontSize:10,color:"#B0A098"}}>TOP/MIDDLE/LAST/BASE・トップ/ミドル/ラスト/ベースを検出（LASTはBASE扱い）。区切りは読点・カンマ・中黒・スペース</span>
+        </div>
+        {bulkNotesMsg&&<p style={{fontSize:11,color:"#8B7B72",marginTop:4}}>{bulkNotesMsg}</p>}
+      </div>
       {["top","mid","base"].map(type=>(
         <div key={type} style={{marginBottom:14}}>
           <label style={{display:"block",fontSize:11,fontWeight:600,letterSpacing:".1em",color:"#8B7B72",marginBottom:6}}>{type==="top"?"TOP ノート":type==="mid"?"MIDDLE ノート":"BASE ノート"}</label>
