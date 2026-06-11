@@ -378,14 +378,13 @@ function ProductForm({onSave,editId,initialData}){
   const [newTagInput,setNewTagInput]=useState("");
   const [newEffectInput,setNewEffectInput]=useState("");
   const [notes,setNotes]=useState({top:[""],mid:[""],base:[""]});
+  const [bulkNoteInput,setBulkNoteInput]=useState("");
   const [links,setLinks]=useState(DEFAULT_LINKS.map(l=>({...l})));
   const [saving,setSaving]=useState(false);
   const [variants,setVariants]=useState([{volume:"",price:"",currency:"JPY",jpy_price:null,weight:"",dimensions:"",images:[]}]);
   const [itemTypes,setItemTypes]=useState([...DEFAULT_ITEM_TYPES,...getCustomTypes()]);
   const [newTypeInput,setNewTypeInput]=useState("");
   const [loadingEdit,setLoadingEdit]=useState(false);
-  const [bulkNotes,setBulkNotes]=useState("");
-  const [bulkNotesMsg,setBulkNotesMsg]=useState("");
   const editLoadedRef=useRef(null);
   const [f,setF]=useState({
     brand_id:"",name:initialData?.name_ja||"",type:initialData?.type||"香水",
@@ -415,25 +414,6 @@ function ProductForm({onSave,editId,initialData}){
   const addNote=type=>setNotes(p=>({...p,[type]:[...p[type],""]}));
   const setNote=(type,i,v)=>setNotes(p=>({...p,[type]:p[type].map((x,j)=>j===i?v:x)}));
   const removeNote=(type,i)=>setNotes(p=>({...p,[type]:p[type].filter((_,j)=>j!==i)}));
-  // 一括貼り付け: 「TOP レモン、オレンジ MIDDLE ローズ LAST ムスク」形式の自由テキストを各ノート欄に振り分ける
-  const applyBulkNotes=()=>{
-    const LABEL_RE=/(TOP|MIDDLE|MID|LAST|BASE|トップ|ミドル|ラスト|ベース)\s*(?:ノート|NOTES?)?\s*[:：]?/gi;
-    const tierOf=l=>{const u=l.toUpperCase();if(u==="TOP"||l==="トップ")return"top";if(u==="MIDDLE"||u==="MID"||l==="ミドル")return"mid";return"base";};// LAST/ラスト/BASE/ベース → base
-    const matches=[...bulkNotes.matchAll(LABEL_RE)];
-    if(matches.length===0){setBulkNotesMsg("⚠ ラベル（TOP/MIDDLE/LAST/BASE/トップ/ミドル/ラスト/ベース）が見つかりません");return;}
-    const parsed={};
-    matches.forEach((m,idx)=>{
-      const tier=tierOf(m[1]);
-      const start=m.index+m[0].length;
-      const end=idx+1<matches.length?matches[idx+1].index:bulkNotes.length;
-      const items=bulkNotes.slice(start,end).split(/[、,，・/\s]+/).map(s=>s.trim()).filter(Boolean);
-      if(items.length)parsed[tier]=[...(parsed[tier]||[]),...items];
-    });
-    if(Object.keys(parsed).length===0){setBulkNotesMsg("⚠ ラベルは見つかりましたが、ノート名がありません");return;}
-    setNotes(p=>({...p,...parsed}));
-    Object.values(parsed).flat().forEach(saveNoteHistory);
-    setBulkNotesMsg("振り分けました: "+["top","mid","base"].filter(t=>parsed[t]).map(t=>`${t.toUpperCase()} ${parsed[t].length}件`).join(" / "));
-  };
   const addLink=()=>setLinks(p=>[...p,{shop_name:"Amazon",url:"",affiliate_code:"",current_price:""}]);
   const setLink=(i,k,v)=>setLinks(p=>p.map((x,j)=>j===i?{...x,[k]:v}:x));
   const removeLink=i=>setLinks(p=>p.filter((_,j)=>j!==i));
@@ -478,6 +458,7 @@ function ProductForm({onSave,editId,initialData}){
         if(noteObj[n.note_type]&&!seenNotes.has(key)){seenNotes.add(key);noteObj[n.note_type].push(n.ingredient_name);}
       });
       setNotes({top:noteObj.top.length?noteObj.top:[""],mid:noteObj.mid.length?noteObj.mid:[""],base:noteObj.base.length?noteObj.base:[""]});
+      setBulkNoteInput("");
       setSelTags([...new Set((p.product_tags||[]).map(pt=>pt.tags?.name).filter(Boolean))]);
       setSelEffects([...new Set((p.product_effects||[]).map(pe=>pe.effect_id).filter(Boolean))]);
       if((p.buy_links||[]).length>0){
@@ -637,17 +618,122 @@ function ProductForm({onSave,editId,initialData}){
       {/* フレグランスノート */}
       <div className="sep"/>
       <p style={{fontSize:12,fontWeight:700,letterSpacing:".15em",color:"#B0A098",marginBottom:12}}>フレグランスノート</p>
-      {/* 一括貼り付け */}
-      <div style={{marginBottom:14}}>
-        <textarea value={bulkNotes} onChange={e=>setBulkNotes(e.target.value)} rows={2}
-          placeholder="一括貼り付け 例: TOP レモン、オレンジ MIDDLE ローズ LAST ムスク"
-          style={{width:"100%",fontSize:12,padding:8,border:"1px solid #E5DDD5",borderRadius:6,resize:"vertical",boxSizing:"border-box"}}/>
-        <div style={{display:"flex",gap:8,alignItems:"center",marginTop:4,flexWrap:"wrap"}}>
-          <button className="btn secondary btn-sm" onClick={applyBulkNotes}>ノートに振り分け</button>
-          <span style={{fontSize:10,color:"#B0A098"}}>TOP/MIDDLE/LAST/BASE・トップ/ミドル/ラスト/ベースを検出（LASTはBASE扱い）。区切りは読点・カンマ・中黒・スペース</span>
+
+      {/* 一括貼り付け（ノート・タグ・効果効能） */}
+      <div style={{background:"#FAF7F3",border:"1px solid #E5DDD5",borderRadius:9,padding:"10px 13px",marginBottom:14}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,flexWrap:"wrap",gap:4}}>
+          <span style={{fontSize:11,fontWeight:600,color:"#8B7B72"}}>一括貼り付け（ノート・タグ・効果効能）</span>
+          <span style={{fontSize:10,color:"#B0A098"}}>商品データブロックをまるごと貼り付けOK</span>
         </div>
-        {bulkNotesMsg&&<p style={{fontSize:11,color:"#8B7B72",marginTop:4}}>{bulkNotesMsg}</p>}
+        <textarea
+          value={bulkNoteInput}
+          onChange={e=>setBulkNoteInput(e.target.value)}
+          placeholder={"【TOP】レモン、オレンジ\n【MID】ローズ、ジャスミン\n【BASE】ムスク\n【タグ】#フローラル #フェミニン #日常\n【効果効能】保湿効果、ハンドケア、リラックス効果\n\n↑この形式でまるごと貼り付け→ボタンで全部振り分け\n（ノートだけ・タグだけの貼り付けもOK）"}
+          style={{width:"100%",border:"1px solid #E5DDD5",borderRadius:7,padding:"8px 10px",fontSize:12,background:"#fff",outline:"none",fontFamily:"'Courier New',monospace",resize:"vertical",minHeight:100,lineHeight:1.6}}
+        />
+        <button className="btn secondary btn-sm" style={{marginTop:7,width:"100%"}}
+          onClick={async()=>{
+            const text=bulkNoteInput;
+            if(!text.trim())return;
+            let summary=[];
+
+            // ───── タグ抽出 ─────
+            const tagLine=text.match(/【\s*タグ\s*】(.*)/);
+            if(tagLine){
+              const tagNames=(tagLine[1].match(/#[^\s#　]+/g)||[]).map(s=>s.trim());
+              if(tagNames.length){
+                for(const name of tagNames){
+                  if(!dynamicTags.includes(name)){
+                    const{error}=await supabase.from("tags").upsert([{name,category:"custom"}],{onConflict:"name"});
+                    if(!error)setDynamicTags(p=>p.includes(name)?p:[name,...p]);
+                  }
+                  saveTagHistory(name);
+                }
+                setSelTags(p=>{const merged=[...tagNames.filter(t2=>!p.includes(t2)),...p];return merged;});
+                summary.push(`タグ${tagNames.length}件`);
+              }
+            }
+
+            // ───── 効果効能抽出 ─────
+            const effLine=text.match(/【\s*効果(?:・|効能)*\s*】(.*)/);
+            if(effLine){
+              const effNames=effLine[1].split(/[,、・]+/).map(s=>s.trim()).filter(Boolean);
+              if(effNames.length){
+                const newIds=[];
+                let effList=[...allEffects];
+                for(const name of effNames){
+                  let found=effList.find(e=>e.name_ja===name);
+                  if(!found){
+                    const{data,error}=await supabase.from("effects").insert([{name_ja:name,name_en:name,name_ko:name,name_zh:name,name_fr:name}]).select().single();
+                    if(!error&&data){found=data;effList=[data,...effList];}
+                  }
+                  if(found){newIds.push(found.id);saveEffectHistory(found.id);}
+                }
+                setAllEffects(effList);
+                setSelEffects(p=>[...newIds.filter(id=>!p.includes(id)),...p]);
+                summary.push(`効果${newIds.length}件`);
+              }
+            }
+
+            // ───── ノート抽出（タグ・効果行を除去してから） ─────
+            let noteText=text
+              .replace(/【\s*タグ\s*】.*/g,"")
+              .replace(/【\s*効果(?:・|効能)*\s*】.*/g,"")
+              .replace(/【\s*説明.*/gs,"");
+
+            let t=noteText
+              .replace(/【\s*TOP\s*】/gi," TOP ")
+              .replace(/【\s*MID(?:DLE)?\s*】/gi," MIDDLE ")
+              .replace(/【\s*BASE\s*】/gi," BASE ")
+              .replace(/【\s*LAST\s*】/gi," BASE ")
+              .replace(/\n+/g," ")
+              .trim();
+
+            const sectionRe=/\b(TOP|MIDDLE|MID|BASE|LAST)\b/gi;
+            const parts=[];
+            let m,prevKey=null,prevEnd=0;
+            const hasKeyword=sectionRe.test(t);
+            sectionRe.lastIndex=0;
+
+            if(hasKeyword){
+              while((m=sectionRe.exec(t))!==null){
+                if(prevKey!==null){
+                  parts.push({key:prevKey.toUpperCase(),text:t.slice(prevEnd,m.index)});
+                }
+                prevKey=m[1];
+                prevEnd=m.index+m[0].length;
+              }
+              if(prevKey)parts.push({key:prevKey.toUpperCase(),text:t.slice(prevEnd)});
+
+              const result={top:[],mid:[],base:[]};
+              parts.forEach(({key,text:tx})=>{
+                const ns=tx.split(/[,、・\s]+/).map(n=>n.trim()).filter(Boolean);
+                if(key==="TOP") result.top.push(...ns);
+                else if(key==="MIDDLE"||key==="MID") result.mid.push(...ns);
+                else if(key==="BASE"||key==="LAST") result.base.push(...ns);
+              });
+
+              if(result.top.length||result.mid.length||result.base.length){
+                setNotes({
+                  top:result.top.length?result.top:[""],
+                  mid:result.mid.length?result.mid:[""],
+                  base:result.base.length?result.base:[""],
+                });
+                result.top.concat(result.mid,result.base).forEach(n=>saveNoteHistory(n));
+                summary.push(`ノートT${result.top.length}/M${result.mid.length}/B${result.base.length}`);
+              }
+            }
+
+            setBulkNoteInput("");
+            const notify=msg=>{try{onToast?onToast(msg):alert(msg);}catch{alert(msg);}};
+            if(summary.length)notify(`振り分け完了: ${summary.join(" / ")}`);
+            else notify("振り分けられる項目が見つかりませんでした");
+          }}>
+          ⚡ 全部まとめて振り分け
+        </button>
       </div>
+
+      {/* 個別入力 */}
       {["top","mid","base"].map(type=>(
         <div key={type} style={{marginBottom:14}}>
           <label style={{display:"block",fontSize:11,fontWeight:600,letterSpacing:".1em",color:"#8B7B72",marginBottom:6}}>{type==="top"?"TOP ノート":type==="mid"?"MIDDLE ノート":"BASE ノート"}</label>
@@ -813,18 +899,14 @@ function AIImportForm({onResult}){
   const [loading,setLoading]=useState(false);
   const [result,setResult]=useState(null);
   const [error,setError]=useState("");
-  const apiKey=import.meta.env.VITE_ANTHROPIC_API_KEY;
 
   const generate=async()=>{
     if(!url.trim())return alert("URLを入力してください");
-    if(!apiKey)return alert(".envにVITE_ANTHROPIC_API_KEYを追加してください\n例: VITE_ANTHROPIC_API_KEY=sk-ant-...");
-    const cleanKey=apiKey.trim().replace(/[^\x00-\x7F]/g,"");
-    if(!cleanKey.startsWith("sk-ant-"))return alert("APIキーが正しくありません。\nsk-ant- で始まるキーを.envに設定してください。\n現在の値: "+apiKey.slice(0,30)+"...");
     setLoading(true);setError("");setResult(null);
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
+      const res=await fetch("/api/ai-import",{
         method:"POST",
-        headers:{"Content-Type":"application/json","x-api-key":cleanKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",max_tokens:3000,
           tools:[{type:"web_search_20250305",name:"web_search"}],
@@ -836,7 +918,9 @@ URL: ${url}
 {"name_ja":"日本語商品名","name_en":"英語名","brand":"ブランド名","type":"香水","volume":"50ml","price":12000,"notes_top":["ノート1"],"notes_mid":["ノート1"],"notes_base":["ノート1"],"tags":["#フローラル"],"effects":["リラックス効果"],"desc_ja":"日本語説明100文字","desc_en":"English 100chars","desc_ko":"한국어 100자","desc_zh":"中文100字","ingredients":"日本語成分","ingr_en":"English ingredients","ingr_ko":"한국어 성분","ingr_zh":"中文成分"}`}]
         })
       });
+      if(res.status===404)throw new Error("APIが見つかりません。ローカル開発時は「vercel dev」で起動するか、本番環境でお試しください。");
       const data=await res.json();
+      if(data.error)throw new Error(typeof data.error==="string"?data.error:data.error.message||"APIエラー");
       const text=data.content?.filter(c=>c.type==="text").map(c=>c.text).join("");
       const jsonMatch=text.match(/\{[\s\S]*\}/);
       if(!jsonMatch)throw new Error("JSON形式で返ってきませんでした。もう一度試してください。");
@@ -851,7 +935,7 @@ URL: ${url}
         <p style={{fontSize:13,color:"#6B5E55",lineHeight:1.7,marginBottom:12}}>
           商品ページのURLを入力すると、AIが商品名・ノート・タグ・説明文（4言語）・成分を自動生成して商品登録フォームに反映します。
         </p>
-        {!apiKey&&<p style={{fontSize:12,background:"#FEF3C7",color:"#92400E",padding:"8px 12px",borderRadius:6,marginBottom:12}}>⚠ .envに VITE_ANTHROPIC_API_KEY を追加してください</p>}
+        <p style={{fontSize:11,color:"#B0A098",marginBottom:12}}>※ APIキーはサーバー側で管理されています（Vercel環境変数 ANTHROPIC_API_KEY）</p>
         <div style={{display:"flex",gap:8}}>
           <input placeholder="https://shiro-shiro.jp/ec/Item/..." value={url} onChange={e=>setUrl(e.target.value)} onKeyDown={e=>e.key==="Enter"&&generate()}
             style={{flex:1,border:"1px solid #E5DDD5",borderRadius:7,padding:"8px 11px",fontSize:13,background:"#FAF7F3",outline:"none",fontFamily:"inherit"}}/>
@@ -914,41 +998,163 @@ function BrandList({onToast,onEdit}){
 }
 
 function ProductList({onToast,onEdit,onDuplicate}){
-  const [products,setProducts]=useState([]);const [loading,setLoading]=useState(true);
-  const load=async()=>{setLoading(true);const{data}=await supabase.from("products").select("id,name,type,price,is_published,image_url,brands(name)").order("created_at",{ascending:false});setProducts(data||[]);setLoading(false);};
+  const [products,setProducts]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [openBrands,setOpenBrands]=useState(new Set());
+  const [openTypes,setOpenTypes]=useState(new Set());
+
+  const load=async()=>{
+    setLoading(true);
+    const{data}=await supabase.from("products").select("id,name,type,price,is_published,image_url,brands(name)").order("created_at",{ascending:false});
+    setProducts(data||[]);
+    setLoading(false);
+  };
   useEffect(()=>{load();},[]);
+
+  const toggleBrand=b=>setOpenBrands(p=>{const n=new Set(p);n.has(b)?n.delete(b):n.add(b);return n;});
+  const toggleType=k=>setOpenTypes(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n;});
   const togglePublish=async(id,cur)=>{await supabase.from("products").update({is_published:!cur}).eq("id",id);onToast(!cur?"公開しました":"非公開にしました");load();};
-  const del=async(id,name)=>{if(!confirm(`「${name}」を削除しますか？`))return;await supabase.from("products").delete().eq("id",id);onToast("削除しました");load();};
+  const del=async(id,name)=>{if(!confirm(`「${name}」を削除しますか？`))return;const{error}=await supabase.from("products").delete().eq("id",id);if(error){alert("削除できませんでした: "+error.message);return;}onToast("削除しました");load();};
+
   if(loading)return<div className="card" style={{color:"#8B7B72",fontSize:13}}>読み込み中...</div>;
   if(!products.length)return<div className="card" style={{color:"#8B7B72",fontSize:13}}>まだ商品が登録されていません。</div>;
-  return (
-    <div className="card" style={{padding:0,overflow:"hidden"}}>
-      <table className="tbl">
-        <thead><tr><th>画像</th><th>商品名</th><th>ブランド</th><th>種別</th><th>価格</th><th>公開</th><th>操作</th></tr></thead>
-        <tbody>
-          {products.map(p=>(
-            <tr key={p.id}>
-              <td>{p.image_url?<img src={p.image_url} style={{width:44,height:44,objectFit:"cover",borderRadius:6}} alt={p.name}/>:<div style={{width:44,height:44,background:"#F0EAE3",borderRadius:6}}/>}</td>
-              <td style={{fontWeight:500}}>{p.name}</td>
-              <td style={{color:"#8B7B72"}}>{p.brands?.name}</td>
-              <td><span className="badge" style={{background:"#F0EAE3",color:"#8B7B72"}}>{p.type}</span></td>
-              <td>{p.price?`¥${p.price.toLocaleString()}`:"—"}</td>
-              <td><span className="badge" style={{background:p.is_published?"#DCFCE7":"#FEE2E2",color:p.is_published?"#166534":"#991B1B"}}>{p.is_published?"公開中":"非公開"}</span></td>
-              <td style={{display:"flex",gap:6}}>
-                <button className="btn secondary btn-sm" onClick={()=>onEdit(p.id)}>編集</button>
-                <button className="btn secondary btn-sm" onClick={()=>onDuplicate(p.id)}>複製</button>
-                <button className="btn secondary btn-sm" onClick={()=>togglePublish(p.id,p.is_published)}>{p.is_published?"非公開に":"公開する"}</button>
-                <button className="btn danger btn-sm" onClick={()=>del(p.id,p.name)}>削除</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+
+  // ブランド→アイテム種別でグルーピング
+  const grouped={};
+  products.forEach(p=>{
+    const brand=p.brands?.name||"未設定";
+    const type=p.type||"未分類";
+    if(!grouped[brand])grouped[brand]={};
+    if(!grouped[brand][type])grouped[brand][type]=[];
+    grouped[brand][type].push(p);
+  });
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {Object.entries(grouped).map(([brand,typeMap])=>{
+        const totalCount=Object.values(typeMap).reduce((s,arr)=>s+arr.length,0);
+        const isBrandOpen=openBrands.has(brand);
+        return(
+          <div key={brand} style={{border:"1px solid #E5DDD5",borderRadius:12,overflow:"hidden",background:"#fff"}}>
+            {/* ブランドヘッダー */}
+            <button onClick={()=>toggleBrand(brand)}
+              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",background:isBrandOpen?"#FFF8F2":"#FAF7F3",border:"none",cursor:"pointer",fontFamily:"inherit",borderBottom:isBrandOpen?"1px solid #EDE5DA":"none"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:15,fontWeight:600,color:"#1C1815"}}>{brand}</span>
+                <span style={{fontSize:11,background:"#F0EAE3",color:"#8B7B72",borderRadius:10,padding:"1px 9px"}}>{totalCount}件</span>
+                <span style={{fontSize:10,color:"#B0A098"}}>{Object.keys(typeMap).length}種別</span>
+              </div>
+              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{transform:isBrandOpen?"rotate(180deg)":"none",transition:"transform .2s",flexShrink:0}}>
+                <path d="M1 1l4 4 4-4" stroke="#C4885A" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+              </svg>
+            </button>
+
+            {/* アイテム種別リスト */}
+            {isBrandOpen&&(
+              <div style={{padding:"8px 12px",display:"flex",flexDirection:"column",gap:6}}>
+                {Object.entries(typeMap).map(([type,prods])=>{
+                  const typeKey=`${brand}::${type}`;
+                  const isTypeOpen=openTypes.has(typeKey);
+                  const pubCount=prods.filter(p=>p.is_published).length;
+                  return(
+                    <div key={type} style={{border:"1px solid #EDE5DA",borderRadius:9,overflow:"hidden"}}>
+                      {/* 種別ヘッダー */}
+                      <button onClick={()=>toggleType(typeKey)}
+                        style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 13px",background:isTypeOpen?"#FFF4EE":"#FAF7F3",border:"none",cursor:"pointer",fontFamily:"inherit",borderBottom:isTypeOpen?"1px solid #EDE5DA":"none"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontSize:12,fontWeight:600,color:"#3C2820"}}>{type}</span>
+                          <span style={{fontSize:10,background:"#F0EAE3",color:"#C4885A",borderRadius:8,padding:"1px 7px",fontWeight:500}}>{prods.length}件</span>
+                          <span style={{fontSize:10,color:"#B0A098"}}>公開{pubCount}件</span>
+                        </div>
+                        <svg width="8" height="5" viewBox="0 0 8 5" fill="none" style={{transform:isTypeOpen?"rotate(180deg)":"none",transition:"transform .2s",flexShrink:0}}>
+                          <path d="M0.5 0.5L4 4L7.5 0.5" stroke="#B0A098" strokeWidth="1.2" fill="none" strokeLinecap="round"/>
+                        </svg>
+                      </button>
+
+                      {/* 商品行 */}
+                      {isTypeOpen&&(
+                        <div style={{background:"#fff"}}>
+                          {prods.map((p,i)=>(
+                            <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 13px",borderTop:i===0?"none":"1px solid #F5F0EA",flexWrap:"wrap"}}>
+                              {/* サムネ */}
+                              {p.image_url
+                                ?<img src={p.image_url} style={{width:38,height:38,objectFit:"cover",borderRadius:6,flexShrink:0}} alt={p.name}/>
+                                :<div style={{width:38,height:38,background:"#F0EAE3",borderRadius:6,flexShrink:0}}/>
+                              }
+                              {/* 商品名・価格 */}
+                              <div style={{flex:1,minWidth:0}}>
+                                <p style={{fontSize:12,fontWeight:500,color:"#1C1815",lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</p>
+                                <p style={{fontSize:11,color:"#8B7B72",marginTop:1}}>{p.price?`¥${p.price.toLocaleString()}`:"—"}</p>
+                              </div>
+                              {/* 公開バッジ */}
+                              <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:p.is_published?"#DCFCE7":"#FEE2E2",color:p.is_published?"#166534":"#991B1B",flexShrink:0,fontWeight:500}}>
+                                {p.is_published?"公開":"非公開"}
+                              </span>
+                              {/* 操作ボタン */}
+                              <div style={{display:"flex",gap:4,flexShrink:0}}>
+                                <button className="btn secondary btn-sm" onClick={()=>onEdit(p.id)}>編集</button>
+                                <button className="btn secondary btn-sm" onClick={()=>onDuplicate(p.id)}>複製</button>
+                                <button className="btn secondary btn-sm" onClick={()=>togglePublish(p.id,p.is_published)} style={{minWidth:60}}>
+                                  {p.is_published?"非公開に":"公開する"}
+                                </button>
+                                <button className="btn danger btn-sm" onClick={()=>del(p.id,p.name)}>削除</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function AdminLogin({onLogin}){
+  const [email,setEmail]=useState("");
+  const [pw,setPw]=useState("");
+  const [err,setErr]=useState("");
+  const [loading,setLoading]=useState(false);
+  const submit=async()=>{
+    setLoading(true);setErr("");
+    const{error}=await supabase.auth.signInWithPassword({email,password:pw});
+    if(error)setErr("ログインできませんでした: "+error.message);
+    else onLogin();
+    setLoading(false);
+  };
+  return(
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#F4F1ED",fontFamily:"'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif"}}>
+      <div style={{background:"#fff",borderRadius:16,padding:"36px 32px",width:"100%",maxWidth:380,boxShadow:"0 4px 24px rgba(0,0,0,.08)"}}>
+        <p style={{fontSize:22,fontWeight:600,color:"#C4885A",fontFamily:"Georgia,serif",marginBottom:2}}>Kaorido</p>
+        <p style={{fontSize:10,letterSpacing:".2em",color:"#B0A098",marginBottom:24}}>ADMIN LOGIN</p>
+        <input type="email" placeholder="メールアドレス" value={email} onChange={e=>setEmail(e.target.value)}
+          style={{width:"100%",border:"1px solid #E5DDD5",borderRadius:8,padding:"10px 13px",fontSize:14,marginBottom:10,outline:"none",fontFamily:"inherit",background:"#FAF7F3",boxSizing:"border-box"}}/>
+        <input type="password" placeholder="パスワード" value={pw} onChange={e=>setPw(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&submit()}
+          style={{width:"100%",border:"1px solid #E5DDD5",borderRadius:8,padding:"10px 13px",fontSize:14,marginBottom:14,outline:"none",fontFamily:"inherit",background:"#FAF7F3",boxSizing:"border-box"}}/>
+        {err&&<p style={{fontSize:12,color:"#991B1B",background:"#FEE2E2",borderRadius:6,padding:"8px 11px",marginBottom:12}}>{err}</p>}
+        <button onClick={submit} disabled={loading}
+          style={{width:"100%",background:"#C4885A",color:"#fff",border:"none",borderRadius:8,padding:"11px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:loading?.6:1}}>
+          {loading?"確認中...":"ログイン"}
+        </button>
+      </div>
     </div>
   );
 }
 
 export default function Admin(){
+  const [session,setSession]=useState(undefined); // undefined=確認中, null=未ログイン
+  useEffect(()=>{
+    supabase.auth.getSession().then(({data})=>setSession(data.session));
+    const{data:sub}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s));
+    return()=>sub.subscription.unsubscribe();
+  },[]);
+
   const [page,setPage]=useState("dashboard");
   const [toast,setToast]=useState("");
   const [counts,setCounts]=useState({});
@@ -983,13 +1189,20 @@ export default function Admin(){
   const nav=[["dashboard","ダッシュボード"],["brand-add","ブランド登録"],["brand-list","ブランド一覧"],["product-add","商品登録"],["product-list","商品一覧"],["ai-import","✨ AI商品登録"]];
   const isEdit=page==="product-edit";const isBrandEdit=page==="brand-edit";
   const titles={dashboard:"ダッシュボード","brand-add":"ブランド登録","brand-list":"ブランド一覧","product-add":"商品登録","product-list":"商品一覧","product-edit":"商品を編集","brand-edit":"ブランドを編集","ai-import":"AI商品登録"};
+
+  // ── 認証ガード ──
+  if(session===undefined)return<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",color:"#B0A098",fontSize:14,fontFamily:"sans-serif"}}>確認中...</div>;
+  if(!session)return<AdminLogin onLogin={()=>{}}/>;
+
   return (
     <>
       <style>{CSS}</style>
       <div className="adm-wrap">
         <div className="adm-side">
           <div className="adm-logo"><span>Kaorido</span><small>ADMIN PANEL</small></div>
-          <div className="adm-nav">{nav.map(([id,lbl])=>(<a key={id} className={page===id?"on":""} onClick={()=>setPage(id)}>{lbl}</a>))}</div>
+          <div className="adm-nav">{nav.map(([id,lbl])=>(<a key={id} className={page===id?"on":""} onClick={()=>setPage(id)}>{lbl}</a>))}
+            <a onClick={async()=>{await supabase.auth.signOut();}} style={{marginTop:20,opacity:.6}}>ログアウト</a>
+          </div>
         </div>
         <div className="adm-main">
           <div className="adm-head">

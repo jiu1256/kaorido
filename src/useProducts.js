@@ -185,9 +185,6 @@ export async function trackView(productId) {
     .from('product_views')
     .insert({ product_id: productId, session_id: sid })
 
-  // 閲覧数カウントを +1
-  await supabase
-    .from('products')
-    .update({ views: supabase.rpc('', {}) })  // 後述のSQL関数で更新
-    .eq('id', productId)
+  // 閲覧数カウントを +1（SECURITY DEFINER関数経由・anonでも安全に実行可）
+  await supabase.rpc('increment_views', { pid: productId })
 }
